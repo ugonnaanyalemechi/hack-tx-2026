@@ -49,6 +49,8 @@ def parse_spec(spec_yaml: str) -> tuple[AgentSpec | None, list[SpecError]]:
             field = ".".join(str(p) for p in e["loc"])
             if e["type"] == "none_required" and field == "trigger":
                 message = "trigger is reserved and must be empty"
+            elif e["type"] == "extra_forbidden":
+                message = f"Unknown field '{e['loc'][-1]}'; check the spelling"
             else:
                 message = e["msg"]
             errors.append(SpecError(field=field, message=message))
