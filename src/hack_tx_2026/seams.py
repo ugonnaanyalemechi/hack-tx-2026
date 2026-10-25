@@ -52,6 +52,17 @@ class RunResult:
 
 def load_agent_tools(agent_version_id: str) -> list[Tool]:
     """Owned by platform (connector layer). Loads only tools from connectors
+<<<<<<< HEAD
+    granted to this agent and allowed by its spec's allow-list."""
+    from hack_tx_2026.connectors import load_agent_tools as _load_agent_tools
+    from hack_tx_2026.db.base import SessionLocal
+
+    session = SessionLocal()
+    try:
+        return list(_load_agent_tools(session, agent_version_id))
+    finally:
+        session.close()
+=======
     granted to this agent and allowed by its spec's allow-list. Each tool
     also has `call(**arguments) -> dict`, which runs it under the
     connector's own account, never the chatting user's. Raises LookupError
@@ -70,6 +81,7 @@ def call_agent_tool(
     the version is unknown. Uses its own DB session."""
     with SessionLocal() as session:
         return connectors.call_agent_tool(session, agent_version_id, tool_name, tool_input)
+>>>>>>> origin/main
 
 
 def check_agent_budget(agent_id: str) -> BudgetStatus:

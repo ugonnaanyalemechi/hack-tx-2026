@@ -7,6 +7,12 @@ account, never the chatting user's (user story 63).
 """
 
 CONNECTOR_NAME = "fake-mcp"
+<<<<<<< HEAD
+
+TOOL_DEFS = [
+    {"name": "lookup", "side_effect": False},
+    {"name": "note", "side_effect": True},
+=======
 # The connector's own service account: every call runs under it.
 ACCOUNT = "svc_fake_mcp"
 
@@ -33,6 +39,7 @@ TOOL_DEFS = [
             "additionalProperties": False,
         },
     },
+>>>>>>> origin/main
 ]
 
 _notes: list[dict] = []
@@ -46,8 +53,13 @@ def lookup(query: str) -> dict:
 def note(text: str) -> dict:
     """Side effect: records a note against the fake MCP server's own account."""
     note_id = f"note_{len(_notes) + 1}"
+<<<<<<< HEAD
+    _notes.append({"id": note_id, "text": text})
+    return {"status": "recorded", "note_id": note_id}
+=======
     _notes.append({"id": note_id, "text": text, "account": ACCOUNT})
     return {"status": "recorded", "note_id": note_id, "account": ACCOUNT}
+>>>>>>> origin/main
 
 
 _TOOL_IMPLS = {"lookup": lookup, "note": note}
