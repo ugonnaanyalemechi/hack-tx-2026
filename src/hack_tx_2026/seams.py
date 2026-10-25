@@ -138,5 +138,11 @@ def read_agent_version(agent_id: str, version_number: int | None = None) -> dict
 
 def run_agent(agent_version_id: str, entry_point: EntryPoint, run_input: RunInput) -> RunResult:
     """Owned by runtime (agent runtime). Used identically by chat, the API
-    address, re-checks and evals — platform's eval runner calls this."""
-    raise NotImplementedError("owner:runtime — agent runtime")
+    address, re-checks and evals — platform's eval runner calls this.
+
+    Runs one eval case (entry point "eval") through the chat runtime on a
+    fresh conversation, with every side-effect tool rejected without human
+    input; see `eval_entry.run_eval`. `run_input.thread_id` is ignored."""
+    from hack_tx_2026 import eval_entry  # the runtime imports this module
+
+    return eval_entry.run_eval(agent_version_id, entry_point, run_input)

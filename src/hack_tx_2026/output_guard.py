@@ -59,6 +59,12 @@ class GuardResult:
         return bool(self.notes)
 
 
+def find_citations(text: str) -> list[str]:
+    """Every citation in the text: `[1]`, `(source: ...)` / `[Source: ...]`, or
+    an http(s) link, in pattern order."""
+    return [m.group(0) for p in _CITATION_PATTERNS for m in p.finditer(text)]
+
+
 def has_citation(text: str) -> bool:
     """True for `[1]`, `(source: ...)` / `[Source: ...]`, or an http(s) link."""
     return any(p.search(text) for p in _CITATION_PATTERNS)
