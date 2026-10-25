@@ -10,9 +10,11 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from hack_tx_2026.db.orm import Agent, AgentVersion
+from hack_tx_2026.db.orm import Agent, AgentVersion, EvalReport
 from hack_tx_2026.errors import ApiError
+from hack_tx_2026.eval_runner import report_out, run_evals
 from hack_tx_2026.identity import CurrentUser
+from hack_tx_2026.models.evals import DeployResponse
 from hack_tx_2026.models.registry import (
     AgentDetail,
     AgentListItem,
@@ -215,11 +217,7 @@ def copy_agent(
     return _detail(session, agent)
 
 
-def deploy_version(
-    session: Session, user: CurrentUser, agent_id: str, version_number: int
-) -> AgentDetail:
-    agent = _get_agent(session, agent_id)
-    _require_owner(agent, user, "deploy")
+def _find_version(session: Session, agent: Agent, version_number: int) -> AgentVersion:
     version = session.scalar(
         select(AgentVersion).where(
             AgentVersion.agent_id == agent.id, AgentVersion.version_number == version_number
@@ -227,10 +225,55 @@ def deploy_version(
     )
     if version is None:
         raise ApiError(404, "version_not_found", "Version not found")
-    version.status = "deployed"
-    agent.live_version_id = version.id
+    return version
+
+
+def deploy_version(
+    session: Session,
+    user: CurrentUser,
+    agent_id: str,
+    version_number: int,
+    override_reason: str | None = None,
+) -> DeployResponse:
+    """Deploy a version through the eval gate.
+
+    Normal deploy (no override_reason): owner only. Runs the evals; a passing
+    report deploys and makes the version live, a failing one marks it
+    "blocked" and never changes the live version. Both return 200.
+
+    Override (override_reason given): admin only (any admin, owner or not).
+    The reason must be non-blank and the version must be "blocked". Evals are
+    not re-run: the existing report records the reason (its `passed` stays
+    False) and the version goes live.
+    """
+    agent = _get_agent(session, agent_id)
+    if override_reason is None:
+        _require_owner(agent, user, "deploy")
+        version = _find_version(session, agent, version_number)
+        report = run_evals(session, version, user.id)
+        if report.passed:
+            version.status = "deployed"
+            agent.live_version_id = version.id
+        else:
+            version.status = "blocked"
+    else:
+        if user.role != "admin":
+            raise ApiError(403, "forbidden", "Only admins can override a blocked deploy")
+        reason = override_reason.strip()
+        if not reason:
+            raise ApiError(422, "override_reason_required", "An override needs a reason")
+        version = _find_version(session, agent, version_number)
+        existing = session.get(EvalReport, version.eval_report_id or "")
+        if version.status != "blocked" or existing is None:
+            raise ApiError(409, "version_not_blocked", "Only a blocked version can be overridden")
+        report = existing
+        report.override_reason = reason
+        version.status = "deployed"
+        agent.live_version_id = version.id
     session.commit()
-    return _detail(session, agent)
+    return DeployResponse(
+        **_detail(session, agent).model_dump(), eval_report=report_out(session, report)
+    )
 
 
 def get_agent_detail(session: Session, agent_id: str) -> AgentDetail:

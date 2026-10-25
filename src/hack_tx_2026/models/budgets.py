@@ -2,7 +2,7 @@
 
 import datetime as dt
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
@@ -39,9 +39,18 @@ class BudgetPauseItem(BaseModel):
     since: dt.datetime
 
 
-# Eval gate ticket #27 will add a BlockedDeployItem (kind "blocked_deploy")
-# and turn this alias into a discriminated union on `kind`.
-QueueItem = BudgetPauseItem
+class BlockedDeployItem(BaseModel):
+    kind: Literal["blocked_deploy"] = "blocked_deploy"
+    agent_id: str
+    agent_name: str
+    version_number: int
+    score: float
+    threshold: float
+    since: dt.datetime
+
+
+# Admin queue entries are a discriminated union on `kind`.
+QueueItem = Annotated[BudgetPauseItem | BlockedDeployItem, Field(discriminator="kind")]
 
 
 class AdminQueue(BaseModel):

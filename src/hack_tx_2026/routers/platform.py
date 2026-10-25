@@ -12,6 +12,7 @@ from hack_tx_2026.db.base import get_session
 from hack_tx_2026.db.orm import User
 from hack_tx_2026.identity import CurrentUser, get_current_user
 from hack_tx_2026.models.api import UserPublic
+from hack_tx_2026.models.evals import DeployRequest, DeployResponse
 from hack_tx_2026.models.registry import (
     AgentDetail,
     AgentPage,
@@ -21,6 +22,7 @@ from hack_tx_2026.models.registry import (
 )
 from hack_tx_2026.routers.admin_reads import router as admin_reads_router
 from hack_tx_2026.routers.budgets import router as budgets_router
+from hack_tx_2026.routers.evals import router as evals_router
 
 router = APIRouter(prefix="/v1", tags=["platform"])
 
@@ -80,10 +82,16 @@ def copy_agent(agent_id: str, body: CopyRequest, session: SessionDep, user: User
 
 @router.post("/agents/{agent_id}/versions/{version_number}/deploy")
 def deploy_agent_version(
-    agent_id: str, version_number: int, session: SessionDep, user: UserDep
-) -> AgentDetail:
-    return registry.deploy_version(session, user, agent_id, version_number)
+    agent_id: str,
+    version_number: int,
+    session: SessionDep,
+    user: UserDep,
+    body: DeployRequest | None = None,
+) -> DeployResponse:
+    override_reason = body.override_reason if body else None
+    return registry.deploy_version(session, user, agent_id, version_number, override_reason)
 
 
 router.include_router(admin_reads_router)
 router.include_router(budgets_router)
+router.include_router(evals_router)
