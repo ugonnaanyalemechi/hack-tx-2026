@@ -77,6 +77,51 @@ def test_list_connectors_shows_the_fake_mcp_server(client, fake_mcp_id) -> None:
     }
 
 
+@pytest.mark.parametrize("connector_name", ["fake-mcp", "filings-demo"])
+def test_listed_tools_match_the_loaded_tools_description_and_input_schema(
+    client, db_session, seam_db, connector_name
+) -> None:
+    connectors.seed_fake_mcp_connector(db_session)
+    connectors.seed_filings_demo_connector(db_session)
+    body = client.get("/v1/connectors", headers=BUILDER).json()
+    [listed] = [c for c in body["items"] if c["name"] == connector_name]
+    agent_id = make_agent(client, {"name": connector_name})
+    grant(client, listed["id"], agent_id)
+
+    loaded_tools = {
+        t.name: {"description": t.description, "input_schema": t.input_schema}
+        for t in seams.load_agent_tools(version_id(agent_id))
+    }
+    listed_tools = {
+        t["name"]: {"description": t["description"], "input_schema": t["input_schema"]}
+        for t in listed["tools"]
+    }
+
+    assert loaded_tools
+    assert listed_tools == loaded_tools
+    assert all(t["description"] for t in listed_tools.values())
+
+
+def test_a_listed_tool_with_no_server_definition_gets_defaults(client, db_session) -> None:
+    db_session.add(
+        Connector(
+            name="unserved-mcp", description="", tools=[{"name": "fetch", "side_effect": False}]
+        )
+    )
+    db_session.commit()
+
+    [unserved] = client.get("/v1/connectors", headers=BUILDER).json()["items"]
+
+    assert unserved["tools"] == [
+        {
+            "name": "fetch",
+            "side_effect": False,
+            "description": "",
+            "input_schema": {"type": "object"},
+        }
+    ]
+
+
 def test_connector_list_pages_by_name(client, db_session, fake_mcp_id) -> None:
     db_session.add(Connector(name="another-mcp", description="", tools=[]))
     db_session.commit()
