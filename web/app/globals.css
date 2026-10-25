@@ -26,6 +26,17 @@
   --text-overline--line-height: 1.2;
   --tracking-overline: 0.08em;
 
+  /* type.h1 (page title inside the product, one per screen) and type.stat
+   * (key figures with a caption beneath), also off the default scale. */
+  --text-h1: 44px;
+  --text-h1--line-height: 1.1;
+  --text-h1--letter-spacing: -0.025em;
+  --text-h1--font-weight: 600;
+  --text-stat: 32px;
+  --text-stat--line-height: 1;
+  --text-stat--letter-spacing: -0.02em;
+  --text-stat--font-weight: 500;
+
   /* Radius: pills act, rectangles hold (P3) */
   --radius-xs: 6px;
   --radius-sm: 10px;
