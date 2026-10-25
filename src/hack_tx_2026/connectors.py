@@ -1,25 +1,6 @@
 """The connector layer: loads MCP tools for an agent, limited to connectors
 an admin has granted and to the agent's allow-list. Marks side-effect
 tools so the runtime asks for approval before running them.
-<<<<<<< HEAD
-"""
-
-import datetime as dt
-from dataclasses import dataclass
-
-from sqlalchemy.orm import Session
-
-from hack_tx_2026.db.orm import AgentVersion, Connector, ConnectorGrant
-from hack_tx_2026.fake_mcp import CONNECTOR_NAME, TOOL_DEFS
-from hack_tx_2026.models.spec import AgentSpec
-
-
-class ConnectorLayerError(Exception):
-    def __init__(self, code: str, message: str):
-        self.code = code
-        self.message = message
-        super().__init__(message)
-=======
 
 Grant and revoke flush; callers commit.
 """
@@ -63,7 +44,6 @@ class ToolNotLoadedError(PermissionError):
     """The tool is not loaded for the agent version: its connector is not
     granted (or the grant was revoked), the allow-list excludes it, or it
     does not exist."""
->>>>>>> origin/main
 
 
 @dataclass
@@ -71,19 +51,6 @@ class LoadedTool:
     connector_name: str
     name: str
     side_effect: bool
-<<<<<<< HEAD
-
-
-def seed_fake_mcp_connector(session: Session) -> Connector:
-    """Idempotent: creates the fake-mcp connector row if it's missing."""
-    connector = session.query(Connector).filter_by(name=CONNECTOR_NAME).first()
-    if connector is None:
-        connector = Connector(
-            name=CONNECTOR_NAME,
-            description="Fake MCP server: a read-only lookup tool and a side-effect note tool.",
-            tools=TOOL_DEFS,
-        )
-=======
     description: str = ""
     input_schema: dict[str, Any] = field(default_factory=lambda: {"type": "object"})
 
@@ -101,17 +68,12 @@ def _seed_connector(
     connector = session.query(Connector).filter_by(name=name).first()
     if connector is None:
         connector = Connector(name=name, description=description, tools=tools)
->>>>>>> origin/main
         session.add(connector)
         session.commit()
         session.refresh(connector)
     return connector
 
 
-<<<<<<< HEAD
-def is_granted(session: Session, connector_id: str, agent_id: str) -> bool:
-    grant = (
-=======
 def seed_fake_mcp_connector(session: Session) -> Connector:
     """Idempotent: creates the fake-mcp connector row if it's missing."""
     return _seed_connector(
@@ -153,75 +115,35 @@ def list_connectors(session: Session, limit: int, cursor: str | None) -> Page[Co
 
 def _active_grant(session: Session, connector_id: str, agent_id: str) -> ConnectorGrant | None:
     return (
->>>>>>> origin/main
         session.query(ConnectorGrant)
         .filter_by(connector_id=connector_id, agent_id=agent_id, revoked_at=None)
         .first()
     )
-<<<<<<< HEAD
-    return grant is not None
-=======
 
 
 def is_granted(session: Session, connector_id: str, agent_id: str) -> bool:
     return _active_grant(session, connector_id, agent_id) is not None
->>>>>>> origin/main
 
 
 def grant_connector(
     session: Session, connector_id: str, agent_id: str, granted_by: str
 ) -> ConnectorGrant:
     """Idempotent: returns the existing active grant if there is one."""
-<<<<<<< HEAD
-    existing = (
-        session.query(ConnectorGrant)
-        .filter_by(connector_id=connector_id, agent_id=agent_id, revoked_at=None)
-        .first()
-    )
-=======
     if session.get(Connector, connector_id) is None:
         raise ApiError(404, "connector_not_found", "Connector not found")
     if session.get(Agent, agent_id) is None:
         raise ApiError(404, "agent_not_found", "Agent not found")
     existing = _active_grant(session, connector_id, agent_id)
->>>>>>> origin/main
     if existing is not None:
         return existing
 
     grant = ConnectorGrant(connector_id=connector_id, agent_id=agent_id, granted_by=granted_by)
     session.add(grant)
-<<<<<<< HEAD
-    session.commit()
-    session.refresh(grant)
-=======
     session.flush()
->>>>>>> origin/main
     return grant
 
 
 def revoke_connector(session: Session, connector_id: str, agent_id: str) -> None:
-<<<<<<< HEAD
-    grant = (
-        session.query(ConnectorGrant)
-        .filter_by(connector_id=connector_id, agent_id=agent_id, revoked_at=None)
-        .first()
-    )
-    if grant is None:
-        raise ConnectorLayerError("not_found", "No active grant for this connector and agent.")
-    grant.revoked_at = dt.datetime.now(dt.UTC)
-    session.add(grant)
-    session.commit()
-
-
-def load_agent_tools(session: Session, agent_version_id: str) -> list[LoadedTool]:
-    """An ungranted connector's tools are never loaded. A tool is a side
-    effect if either the connector says so or the builder's spec marks it —
-    whichever is more cautious wins.
-    """
-    version = session.get(AgentVersion, agent_version_id)
-    if version is None:
-        raise ConnectorLayerError("not_found", f"No agent version {agent_version_id!r}.")
-=======
     grant = _active_grant(session, connector_id, agent_id)
     if grant is None:
         raise ApiError(404, "grant_not_found", "No active grant for this connector and agent")
@@ -238,16 +160,12 @@ def load_agent_tools(session: Session, agent_version_id: str) -> list[LoadedTool
     version = session.get(AgentVersion, agent_version_id)
     if version is None:
         raise LookupError(f"agent version {agent_version_id} not found")
->>>>>>> origin/main
     spec = AgentSpec.model_validate(version.spec)
 
     tools: list[LoadedTool] = []
     for connector_spec in spec.connectors:
-<<<<<<< HEAD
-=======
         if connector_spec.name not in _SERVERS:
             continue
->>>>>>> origin/main
         connector = session.query(Connector).filter_by(name=connector_spec.name).first()
         if connector is None or not is_granted(session, connector.id, version.agent_id):
             continue
@@ -259,13 +177,6 @@ def load_agent_tools(session: Session, agent_version_id: str) -> list[LoadedTool
             side_effect = (
                 bool(tool_def.get("side_effect")) or name in connector_spec.side_effect_tools
             )
-<<<<<<< HEAD
-            tools.append(
-                LoadedTool(connector_name=connector.name, name=name, side_effect=side_effect)
-            )
-
-    return tools
-=======
             server_def = next((d for d in _SERVER_DEFS[connector.name] if d["name"] == name), {})
             tools.append(
                 LoadedTool(
@@ -292,4 +203,3 @@ def call_agent_tool(
         f"Tool {tool_name!r} is not loaded for agent version {agent_version_id}: "
         "its connector is not granted, or it is not on the agent's allow-list."
     )
->>>>>>> origin/main

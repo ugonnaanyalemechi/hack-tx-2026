@@ -4,16 +4,14 @@ admin reads, tickets, identity and seeded users. Add routes here, never in app.p
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from hack_tx_2026 import connectors, registry
-from hack_tx_2026.connectors import ConnectorLayerError
+from hack_tx_2026 import registry
 from hack_tx_2026.db.base import get_session
-from hack_tx_2026.db.orm import Connector, ConnectorGrant, User
+from hack_tx_2026.db.orm import User
 from hack_tx_2026.identity import CurrentUser, get_current_user
 from hack_tx_2026.models.api import UserPublic
-from hack_tx_2026.models.connector_api import ConnectorOut, GrantOut, GrantRequest, ToolOut
 from hack_tx_2026.models.evals import DeployRequest, DeployResponse
 from hack_tx_2026.models.registry import (
     AgentDetail,
@@ -34,41 +32,6 @@ SessionDep = Annotated[Session, Depends(get_session)]
 UserDep = Annotated[CurrentUser, Depends(get_current_user)]
 
 
-def _require_admin(user: UserDep) -> CurrentUser:
-    if user.role != "admin":
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "error": {
-                    "code": "forbidden",
-                    "message": "Only an admin can grant or revoke a connector.",
-                    "details": None,
-                }
-            },
-        )
-    return user
-
-
-def _connector_out(connector: Connector) -> ConnectorOut:
-    return ConnectorOut(
-        id=connector.id,
-        name=connector.name,
-        description=connector.description,
-        tools=[ToolOut(**tool) for tool in connector.tools],
-    )
-
-
-def _grant_out(grant: ConnectorGrant) -> GrantOut:
-    return GrantOut(
-        id=grant.id,
-        connector_id=grant.connector_id,
-        agent_id=grant.agent_id,
-        granted_by=grant.granted_by,
-        granted_at=grant.granted_at,
-        revoked_at=grant.revoked_at,
-    )
-
-
 @router.get("/users")
 def list_users(session: Annotated[Session, Depends(get_session)]) -> list[UserPublic]:
     """Seeded users for the role switcher. No identity header required."""
@@ -79,39 +42,6 @@ def list_users(session: Annotated[Session, Depends(get_session)]) -> list[UserPu
 @router.get("/me")
 def me(user: Annotated[CurrentUser, Depends(get_current_user)]) -> UserPublic:
     return UserPublic(id=user.id, name=user.name, role=user.role)
-
-
-@router.get("/connectors", response_model=list[ConnectorOut])
-def list_connectors(session: SessionDep) -> list[ConnectorOut]:
-    rows = session.query(Connector).order_by(Connector.name).all()
-    return [_connector_out(c) for c in rows]
-
-
-@router.post("/connectors/{connector_id}/grants", response_model=GrantOut, status_code=201)
-def grant_connector(
-    connector_id: str,
-    body: GrantRequest,
-    session: SessionDep,
-    admin: Annotated[CurrentUser, Depends(_require_admin)],
-) -> GrantOut:
-    grant = connectors.grant_connector(session, connector_id, body.agent_id, admin.id)
-    return _grant_out(grant)
-
-
-@router.delete("/connectors/{connector_id}/grants/{agent_id}", status_code=204)
-def revoke_connector(
-    connector_id: str,
-    agent_id: str,
-    session: SessionDep,
-    admin: Annotated[CurrentUser, Depends(_require_admin)],
-) -> None:
-    try:
-        connectors.revoke_connector(session, connector_id, agent_id)
-    except ConnectorLayerError as exc:
-        raise HTTPException(
-            status_code=404,
-            detail={"error": {"code": exc.code, "message": exc.message, "details": None}},
-        ) from exc
 
 
 @router.post("/agents/validate")
