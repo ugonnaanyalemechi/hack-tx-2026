@@ -26,6 +26,41 @@
   --text-overline--line-height: 1.2;
   --tracking-overline: 0.08em;
 
+  /* Type scale (docs/design-system.md §3). H1 steps down to 32px below
+   * 768px, so it has a mobile size too: `text-h1-sm md:text-h1`. */
+  --text-h1: 44px;
+  --text-h1--line-height: 1.1;
+  --text-h1--letter-spacing: -0.025em;
+  --text-h1--font-weight: 600;
+  --text-h1-sm: 32px;
+  --text-h1-sm--line-height: 1.1;
+  --text-h1-sm--letter-spacing: -0.025em;
+  --text-h1-sm--font-weight: 600;
+  --text-h3: 24px;
+  --text-h3--line-height: 1.25;
+  --text-h3--letter-spacing: -0.015em;
+  --text-h3--font-weight: 600;
+  --text-h4: 18px;
+  --text-h4--line-height: 1.35;
+  --text-h4--letter-spacing: -0.01em;
+  --text-h4--font-weight: 600;
+  --text-stat: 32px;
+  --text-stat--line-height: 1;
+  --text-stat--letter-spacing: -0.02em;
+  --text-stat--font-weight: 500;
+  --text-body-l: 18px;
+  --text-body-l--line-height: 1.55;
+  --text-body-l--letter-spacing: -0.005em;
+
+  /* Motion (§6): every transition is 160ms on this curve. */
+  --ease-nocturne: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* Containers (§4): max-w-wide for nav and full-bleed rows, max-w-content
+   * for page content, max-w-measure for body copy. */
+  --container-wide: 1360px;
+  --container-content: 1200px;
+  --container-measure: 560px;
+
   /* Radius: pills act, rectangles hold (P3) */
   --radius-xs: 6px;
   --radius-sm: 10px;
@@ -137,6 +172,21 @@
   --color-chart-3: var(--color-accent-400);
   --color-chart-4: var(--color-success);
   --color-chart-5: var(--color-info);
+}
+
+/* gradient.glow (§5): the single cobalt light behind a view's hero. One
+ * per view. */
+@utility bg-glow {
+  background-image: radial-gradient(
+    60% 55% at 65% 40%,
+    rgba(66, 85, 245, 0.55),
+    rgba(66, 85, 245, 0) 70%
+  );
+}
+
+/* gradient.cobalt (§5): brand objects such as the logo tile. */
+@utility bg-cobalt {
+  background-image: linear-gradient(135deg, #5468f5 0%, #2f3fd6 55%, #1e2690 100%);
 }
 
 @layer base {

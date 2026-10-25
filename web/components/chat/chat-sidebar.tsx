@@ -27,8 +27,7 @@ export function ChatSidebar({
   return (
     <aside className="flex w-70 shrink-0 flex-col gap-6 border-r border-border-subtle bg-surface-1 p-5">
       <a
-        href="#"
-        onClick={(e) => e.preventDefault()}
+        href="/catalog"
         className="inline-flex w-fit items-center gap-1.5 text-sm text-text-secondary transition-colors hover:text-text-primary"
       >
         <ArrowLeft className="size-3.5" aria-hidden />
