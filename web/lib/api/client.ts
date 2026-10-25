@@ -19,6 +19,18 @@ import type {
   UsageReport,
   UserPublic,
 } from "@/lib/contracts/api";
+import type {
+  EvalCaseOut,
+  SaveAsTestCaseRequest,
+  TicketDetail,
+  TicketListItem,
+  TicketStatus,
+} from "@/lib/contracts/tickets";
+
+export interface TicketsParams extends PageParams {
+  agentId?: string | null;
+  status?: TicketStatus | null;
+}
 
 export interface RunsParams extends PageParams {
   agentId?: string | null;
@@ -41,6 +53,14 @@ export interface ApiClient {
   getRun(runId: string): Promise<RunDetailWithApprovals>;
   /** `GET /v1/usage`: spend by agent and by day. */
   getUsage(params?: UsageParams): Promise<UsageReport>;
+  /** `GET /v1/tickets`: admin sees all, a builder their own agents'. */
+  listTickets(params?: TicketsParams): Promise<Page<TicketListItem>>;
+  /** `GET /v1/tickets/{id}`. */
+  getTicket(ticketId: string): Promise<TicketDetail>;
+  /** `POST /v1/tickets/{id}/resolve`: idempotent. */
+  resolveTicket(ticketId: string): Promise<TicketDetail>;
+  /** `POST /v1/tickets/{id}/save-as-test-case`: 201 with the new eval case. */
+  saveTicketAsTestCase(ticketId: string, body: SaveAsTestCaseRequest): Promise<EvalCaseOut>;
 }
 
 /** An `ErrorResponse` from the API (or a network failure, status 0). */

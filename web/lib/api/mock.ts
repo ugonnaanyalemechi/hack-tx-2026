@@ -25,6 +25,8 @@ import type {
   UserPublic,
 } from "@/lib/contracts/api";
 import { ApiError, type ApiClient } from "@/lib/api/client";
+import type { TicketDetail, TicketListItem } from "@/lib/contracts/tickets";
+import { MOCK_TICKETS } from "@/lib/api/mock-tickets";
 import {
   MOCK_AGENTS,
   MOCK_RUNS,
@@ -140,6 +142,54 @@ export function createMockClient(options: MockClientOptions): ApiClient {
       : common;
   }
 
+  /** Tickets the caller may see: an admin all, a builder their agents'. */
+  function visibleTickets(user: UserPublic, agentId: string | null | undefined): TicketDetail[] {
+    const denied = () =>
+      new ApiError(403, {
+        code: "forbidden",
+        message: "Only the owner or an admin can see these tickets",
+      });
+    if (agentId) {
+      const agent = getAgent(agentId);
+      if (!canReadRunLog(user, agent.owner_id)) throw denied();
+    } else if (user.role !== "admin" && user.role !== "builder") {
+      throw denied();
+    }
+    return MOCK_TICKETS.filter((t) => {
+      if (agentId && t.agent_id !== agentId) return false;
+      return user.role === "admin" || getAgent(t.agent_id).owner_id === user.id;
+    });
+  }
+
+  function loadTicket(user: UserPublic, ticketId: string): TicketDetail {
+    const ticket = MOCK_TICKETS.find((t) => t.id === ticketId);
+    if (!ticket) {
+      throw new ApiError(404, { code: "ticket_not_found", message: "Ticket not found" });
+    }
+    if (!canReadRunLog(user, getAgent(ticket.agent_id).owner_id)) {
+      throw new ApiError(403, {
+        code: "forbidden",
+        message: "Only the owner or an admin can see this ticket",
+      });
+    }
+    return ticket;
+  }
+
+  function toListItem(ticket: TicketDetail): TicketListItem {
+    return {
+      id: ticket.id,
+      agent_id: ticket.agent_id,
+      agent_name: ticket.agent_name,
+      run_id: ticket.run_id,
+      recheck_run_id: ticket.recheck_run_id,
+      question: ticket.question,
+      status: ticket.status,
+      created_by: ticket.created_by,
+      created_at: ticket.created_at,
+      resolved_at: ticket.resolved_at,
+    };
+  }
+
   return {
     listUsers: () => respond(() => MOCK_USERS.map((u) => ({ ...u })), { ignoreScenario: true }),
 
@@ -216,6 +266,42 @@ export function createMockClient(options: MockClientOptions): ApiClient {
           }))
           .sort((a, b) => byCodepoint(a.day, b.day));
         return { by_agent, by_day };
+      }),
+
+    listTickets: (params = {}) =>
+      respond(() => {
+        const user = caller();
+        const visible = visibleTickets(user, params.agentId).filter(
+          (t) => !params.status || t.status === params.status
+        );
+        return paginate(isEmpty() ? [] : visible.map(toListItem), params);
+      }),
+
+    getTicket: (ticketId) => respond(() => ({ ...loadTicket(caller(), ticketId) })),
+
+    resolveTicket: (ticketId) =>
+      respond(() => {
+        const ticket = loadTicket(caller(), ticketId);
+        if (ticket.status !== "resolved") {
+          ticket.status = "resolved";
+          ticket.resolved_at = new Date().toISOString();
+        }
+        return { ...ticket };
+      }),
+
+    saveTicketAsTestCase: (ticketId, body) =>
+      respond(() => {
+        const ticket = loadTicket(caller(), ticketId);
+        return {
+          id: `evc_${ticket.id.slice(4, 12)}`,
+          agent_id: ticket.agent_id,
+          question: ticket.question,
+          expected_strings: body.expected_strings,
+          citation_required: body.citation_required,
+          rubric: body.rubric,
+          origin: "flag",
+          created_at: new Date().toISOString(),
+        };
       }),
   };
 }

@@ -11,6 +11,7 @@ interface ChatThreadProps {
   threadState: "loading" | "ready";
   agentName: string;
   onRetryMessage: (messageId: string) => void;
+  onFlag: (messageId: string) => void;
   onDecide: (
     messageId: string,
     approvalId: string,
@@ -23,6 +24,7 @@ export function ChatThread({
   threadState,
   agentName,
   onRetryMessage,
+  onFlag,
   onDecide,
 }: ChatThreadProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -68,6 +70,7 @@ export function ChatThread({
               message={message}
               agentName={agentName}
               onRetry={() => onRetryMessage(message.id)}
+              onFlag={() => onFlag(message.id)}
               onDecide={(decision) => {
                 if (message.approval) {
                   onDecide(message.id, message.approval.id, decision);

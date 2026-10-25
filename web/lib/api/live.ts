@@ -28,7 +28,12 @@ function isErrorResponse(body: unknown): body is ErrorResponse {
 export function createLiveClient(options: LiveClientOptions): ApiClient {
   const { baseUrl, identityHeaderName, userId } = options;
 
-  async function get<T>(path: string, query: Query = {}): Promise<T> {
+  async function request<T>(
+    method: "GET" | "POST",
+    path: string,
+    query: Query = {},
+    json?: unknown
+  ): Promise<T> {
     const search = new URLSearchParams();
     for (const [key, value] of Object.entries(query)) {
       if (value !== null && value !== undefined && value !== "") {
@@ -39,10 +44,16 @@ export function createLiveClient(options: LiveClientOptions): ApiClient {
     const url = `${baseUrl}${path}${qs ? `?${qs}` : ""}`;
     const headers: Record<string, string> = { Accept: "application/json" };
     if (userId) headers[identityHeaderName] = userId;
+    if (json !== undefined) headers["Content-Type"] = "application/json";
 
     let response: Response;
     try {
-      response = await fetch(url, { headers, cache: "no-store" });
+      response = await fetch(url, {
+        method,
+        headers,
+        body: json === undefined ? undefined : JSON.stringify(json),
+        cache: "no-store",
+      });
     } catch {
       throw new ApiError(0, {
         code: "network_error",
@@ -61,6 +72,9 @@ export function createLiveClient(options: LiveClientOptions): ApiClient {
     return body as T;
   }
 
+  const get = <T>(path: string, query: Query = {}) => request<T>("GET", path, query);
+  const post = <T>(path: string, json: unknown = {}) => request<T>("POST", path, {}, json);
+
   return {
     listUsers: () => get("/v1/users"),
     listCatalog: (params) => get("/v1/catalog", pageQuery(params)),
@@ -69,5 +83,15 @@ export function createLiveClient(options: LiveClientOptions): ApiClient {
       get("/v1/runs", { ...pageQuery(params), agent_id: params.agentId }),
     getRun: (runId) => get(`/v1/runs/${encodeURIComponent(runId)}`),
     getUsage: (params = {}) => get("/v1/usage", { agent_id: params.agentId }),
+    listTickets: (params = {}) =>
+      get("/v1/tickets", {
+        ...pageQuery(params),
+        agent_id: params.agentId,
+        status: params.status,
+      }),
+    getTicket: (ticketId) => get(`/v1/tickets/${encodeURIComponent(ticketId)}`),
+    resolveTicket: (ticketId) => post(`/v1/tickets/${encodeURIComponent(ticketId)}/resolve`),
+    saveTicketAsTestCase: (ticketId, body) =>
+      post(`/v1/tickets/${encodeURIComponent(ticketId)}/save-as-test-case`, body),
   };
 }

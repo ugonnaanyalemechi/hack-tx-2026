@@ -39,6 +39,21 @@ export interface ApprovalRequest {
   error?: string;
 }
 
+/**
+ * Where a flagged answer is in its re-check. Client-side only: the spec
+ * (#10, flow 4) says flagging "streams the re-check", but the backend has
+ * no flag route or flag-specific event yet (runtime #30). The re-check is
+ * assumed to stream ordinary StreamEvents (run_started ... message_complete
+ * ... run_finished), so no shared contract changes.
+ */
+// RUNTIME-PLACEHOLDER(#30): client-side stand-in for the flag/re-check state, since the backend has no flag route or event yet. Replace with the real flag response and event shape once #30 lands.
+export interface FlagState {
+  /** "flagging" while the flag call is in flight, before its stream starts. */
+  status: "flagging" | "rechecking" | "rechecked" | "error";
+  /** Set when the flag call failed before its stream started. */
+  error?: string;
+}
+
 export type ChatMessage =
   | {
       id: string;
@@ -58,6 +73,11 @@ export type ChatMessage =
       guardNote?: string;
       /** Set when this run stopped at a side-effect tool for approval. */
       approval?: ApprovalRequest;
+      /** Set once the user flags this answer. */
+      flag?: FlagState;
+      /** Set on a re-check answer: the id of the flagged message it follows. */
+      // RUNTIME-PLACEHOLDER(#30): the real re-check is a recheck run linked to the ticket (recheck_run_id), not to a chat message. Replace this link once #30 and the thread read (#15) define how a re-check message is stored.
+      recheckOf?: string;
       /** Set when the run ended in error instead of a completed message. */
       error?: { code: string; message: string };
       status: "streaming" | "done" | "error";
