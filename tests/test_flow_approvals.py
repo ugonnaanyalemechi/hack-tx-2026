@@ -69,8 +69,7 @@ def fake_model(install_model) -> ScriptedModel:
     return model
 
 
-@pytest.fixture
-def agent_id(client, db_session, runtime_db) -> str:
+def deploy_agent(client, db_session, guardrails: dict) -> str:
     """A deployed agent owned by usr_builder, granted the fake MCP server."""
     spec = {
         "spec_version": 1,
@@ -82,8 +81,7 @@ def agent_id(client, db_session, runtime_db) -> str:
         "connectors": [{"name": "fake-mcp"}],
         "budget": {"monthly_cap": 10.0},
         "evals": {"min_score": 0.8},
-        # These tests are not about the output guard (see test_flow_guard.py).
-        "guardrails": {"require_citation": False, "strip_secrets": False},
+        "guardrails": guardrails,
     }
     fake_mcp = connectors.seed_fake_mcp_connector(db_session)
     r = client.post("/v1/agents", json={"spec_yaml": yaml.safe_dump(spec)}, headers=BUILDER)
@@ -96,6 +94,17 @@ def agent_id(client, db_session, runtime_db) -> str:
     d = client.post(f"/v1/agents/{created}/versions/1/deploy", headers=BUILDER)
     assert d.status_code == 200, d.text
     return created
+
+
+@pytest.fixture
+def agent_id(client, db_session, runtime_db) -> str:
+    # Most of these tests are not about the output guard (see test_flow_guard.py).
+    return deploy_agent(client, db_session, {"require_citation": False, "strip_secrets": False})
+
+
+@pytest.fixture
+def secrets_agent_id(client, db_session, runtime_db) -> str:
+    return deploy_agent(client, db_session, {"require_citation": False, "strip_secrets": True})
 
 
 def new_thread(client, agent_id: str, headers=END_USER) -> dict:
@@ -447,3 +456,65 @@ def test_each_approval_step_shows_its_own_decision(
     # Both tool results reached the model, in call order.
     tool_ids = [m["tool_call_id"] for m in fake_model.requests[-1].messages if m["role"] == "tool"]
     assert tool_ids == ["call_1", "call_2"]
+
+
+# --- The output guard and run ids on text sent before asking ---
+
+LEAK = "The key is sk-abcdefghijklmnopqrstuvwxyz0123456789"
+
+
+def test_secrets_are_stripped_from_the_text_sent_before_asking(
+    client, fake_model, secrets_agent_id
+) -> None:
+    thread, events = ask_for_a_note(client, fake_model, secrets_agent_id, text=LEAK)
+
+    types = [e["type"] for e in events if e["type"] != "token"]
+    assert types == [
+        "run_started",
+        "guard_note",
+        "message_complete",
+        "approval_required",
+        "run_finished",
+    ]
+    complete = next(e for e in events if e["type"] == "message_complete")
+    assert "sk-abc" not in complete["text"]
+    assert "[redacted]" in complete["text"]
+    messages = client.get(f"/v1/threads/{thread['id']}/messages", headers=END_USER).json()
+    assert "sk-abc" not in json.dumps(messages)
+
+
+def test_the_stripped_pre_approval_text_is_what_the_model_remembers(
+    client, fake_model, secrets_agent_id
+) -> None:
+    _, asked = ask_for_a_note(client, fake_model, secrets_agent_id, text=LEAK)
+    fake_model.script(reply("Saved the note."))
+    approval = next(e for e in asked if e["type"] == "approval_required")
+
+    decide(client, approval["approval_id"], "approve")
+
+    assert "sk-abc" not in json.dumps(fake_model.requests[-1].messages)
+
+
+def test_the_text_before_asking_belongs_to_the_run_and_flagging_takes_the_final_answer(
+    client, fake_model, agent_id
+) -> None:
+    thread, asked = ask_for_a_note(client, fake_model, agent_id, text="Let me save that.")
+    run_id = asked[0]["run_id"]
+    approval = next(e for e in asked if e["type"] == "approval_required")
+    fake_model.script(reply("Saved the note."))
+    decide(client, approval["approval_id"], "approve")
+
+    messages = client.get(f"/v1/threads/{thread['id']}/messages", headers=END_USER).json()
+    assert [(m["role"], m["text"], m["run_id"]) for m in messages] == [
+        ("user", "Save a note about revenue", None),
+        ("assistant", "Let me save that.", run_id),
+        ("assistant", "Saved the note.", run_id),
+    ]
+    fake_model.script(reply("Done again."))
+    with client.stream("POST", f"/v1/runs/{run_id}/flag", json={}, headers=END_USER) as r:
+        assert r.status_code == 200, r.read()
+        "".join(r.iter_text())
+    [item] = client.get("/v1/tickets", headers=ADMIN).json()["items"]
+    ticket = client.get(f"/v1/tickets/{item['id']}", headers=ADMIN).json()
+    assert ticket["question"] == "Save a note about revenue"
+    assert ticket["answer"] == "Saved the note."

@@ -281,10 +281,19 @@ def _tools_node(state: ChatState, runtime: Runtime[RunContext]) -> ChatState:
             first_approval = not any(c["function"]["name"] in side_effect for c in calls[:position])
             if text and first_approval:
                 # What the model said before asking is a message of its own.
+                # It gets the secrets pass (not the citation check: it is not
+                # the answer) and memory keeps the guarded text.
+                text = _strip_secrets_from(runtime.context, text)
                 write(MessageCompleteEvent(text=text))
                 update["transcript"] = [
-                    {"role": "assistant", "text": text, "created_at": _now_iso()}
+                    {
+                        "role": "assistant",
+                        "text": text,
+                        "created_at": _now_iso(),
+                        "run_id": runtime.context.run_id,
+                    }
                 ]
+                turn = [*turn[:index], {**turn[index], "content": text}, *turn[index + 1 :]]
             approval_id = _request_approval(runtime.context, name, arguments)
             write(
                 ApprovalRequiredEvent(approval_id=approval_id, tool_name=name, tool_input=arguments)
@@ -355,6 +364,40 @@ def _guard_answer(ctx: RunContext, text: str) -> str:
             output={
                 "secrets_stripped": result.secrets_stripped,
                 "blocked": result.blocked,
+                "notes": result.notes,
+            },
+            latency_ms=int((time.monotonic() - started) * 1000),
+        )
+        session.commit()
+    write = get_stream_writer()
+    for note in result.notes:
+        write(GuardNoteEvent(note=note))
+    return result.text
+
+
+def _strip_secrets_from(ctx: RunContext, text: str) -> str:
+    """Strips secrets from text the user sees before the final answer (what the
+    model said before asking for approval). Records a guard step and streams a
+    GuardNoteEvent only when something was stripped."""
+    guardrails = ctx.spec.guardrails
+    if not guardrails.strip_secrets:
+        return text
+    started = time.monotonic()
+    result = output_guard.guard_text(
+        text, guardrails.model_copy(update={"require_citation": False})
+    )
+    if not result.changed:
+        return text
+    with SessionLocal() as session:
+        recorder.record_step(
+            session,
+            ctx.run_id,
+            kind="guard",
+            name="output_guard",
+            input={"require_citation": False, "strip_secrets": True},
+            output={
+                "secrets_stripped": result.secrets_stripped,
+                "blocked": False,
                 "notes": result.notes,
             },
             latency_ms=int((time.monotonic() - started) * 1000),

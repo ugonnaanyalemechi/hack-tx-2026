@@ -269,8 +269,14 @@ def flaggable_run(session: Session, user: CurrentUser, run_id: str) -> FlagTarge
     question = next(
         (e["text"] for e in entries if e["role"] == "user" and e.get("run_id") == run.id), None
     )
+    # The last assistant entry is the final answer: a run that asked for an
+    # approval first wrote an earlier entry (what the model said before asking).
     answer = next(
-        (e["text"] for e in entries if e["role"] == "assistant" and e.get("run_id") == run.id),
+        (
+            e["text"]
+            for e in reversed(entries)
+            if e["role"] == "assistant" and e.get("run_id") == run.id
+        ),
         None,
     )
     if question is None or answer is None:
