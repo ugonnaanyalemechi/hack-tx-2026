@@ -37,6 +37,7 @@ Where later tickets plug in:
 """
 
 import datetime as dt
+import functools
 import json
 import logging
 import time
@@ -54,7 +55,7 @@ from langgraph.runtime import Runtime
 from langgraph.types import Command, interrupt
 
 from hack_tx_2026 import output_guard, recorder, seams
-from hack_tx_2026.checkpointer import get_checkpointer
+from hack_tx_2026.checkpointer import PooledSaver, get_checkpointer
 from hack_tx_2026.db.base import SessionLocal
 from hack_tx_2026.db.orm import Approval, Run, Thread
 from hack_tx_2026.gateway import (
@@ -386,6 +387,15 @@ def _respond_node(state: ChatState, runtime: Runtime[RunContext]) -> ChatState:
 
 
 def build_graph() -> CompiledStateGraph[ChatState, RunContext, ChatState, ChatState]:
+    """The compiled graph over the current checkpointer. Compiled once per
+    checkpointer, not per call (tests that install another one get their own)."""
+    return _compile(get_checkpointer())
+
+
+@functools.lru_cache(maxsize=1)
+def _compile(
+    saver: PooledSaver,
+) -> CompiledStateGraph[ChatState, RunContext, ChatState, ChatState]:
     graph = StateGraph(ChatState, context_schema=RunContext)
     graph.add_node("model", _model_node)
     graph.add_node("tools", _tools_node)
@@ -396,7 +406,7 @@ def build_graph() -> CompiledStateGraph[ChatState, RunContext, ChatState, ChatSt
     graph.add_conditional_edges("tools", _after_tools, ["approval", "model"])
     graph.add_edge("approval", "tools")
     graph.add_edge("respond", END)
-    return graph.compile(checkpointer=get_checkpointer())
+    return graph.compile(checkpointer=saver)
 
 
 def _config(thread_id: str) -> RunnableConfig:
