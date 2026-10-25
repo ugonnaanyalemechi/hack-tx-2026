@@ -11,7 +11,7 @@ import {
 
 /**
  * Spend per agent as a table, with each agent's share of the total drawn
- * as a single-hue meter (cobalt on a lighter cobalt track). The figures
+ * as a single-hue meter (amber on a darker amber track). The figures
  * sit in the table, so the meter never carries a value on its own.
  */
 export function UsageByAgent({ rows }: { rows: AgentUsage[] }) {

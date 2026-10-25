@@ -26,6 +26,14 @@ import type {
 } from "@/lib/contracts/api";
 import type { AdminQueue, BudgetOut } from "@/lib/contracts/budgets";
 import { ApiError, type ApiClient } from "@/lib/api/client";
+import type { TicketDetail, TicketListItem } from "@/lib/contracts/tickets";
+import { allMockTickets, persistFiledTickets } from "@/lib/api/mock-tickets";
+import {
+  mockBlockedDeploys,
+  mockDeployVersion,
+  mockGetAgentDetail,
+  mockListEvalReports,
+} from "@/lib/api/mock-deploy";
 import { mockApproveSpend, mockGetBudget, mockListBudgets } from "@/lib/api/mock-budgets";
 import {
   MOCK_AGENTS,
@@ -64,7 +72,10 @@ function sumDecimals(values: string[]): string {
 export function createMockClient(options: MockClientOptions): ApiClient {
   const { userId, latencyMs = 250, getScenario = () => null } = options;
 
-  function respond<T>(produce: () => T, opts: { ignoreScenario?: boolean } = {}): Promise<T> {
+  function respond<T>(
+    produce: () => T,
+    opts: { ignoreScenario?: boolean; delayMs?: number } = {}
+  ): Promise<T> {
     const scenario = opts.ignoreScenario ? null : getScenario();
     if (scenario === "loading") return new Promise<T>(() => {});
     return new Promise<T>((resolve, reject) => {
@@ -80,7 +91,7 @@ export function createMockClient(options: MockClientOptions): ApiClient {
         } catch (error) {
           reject(error);
         }
-      }, latencyMs);
+      }, opts.delayMs ?? latencyMs);
     });
   }
 
@@ -140,6 +151,47 @@ export function createMockClient(options: MockClientOptions): ApiClient {
     return canReadRunLog(user, getAgent(run.agent_id).owner_id)
       ? { ...common, cost_total: run.cost_total }
       : common;
+  }
+
+  /** Tickets the caller may see: an admin all, a builder their agents'. */
+  function visibleTickets(user: UserPublic, agentId: string | null | undefined): TicketDetail[] {
+    const denied = () =>
+      new ApiError(403, {
+        code: "forbidden",
+        message: "Only the owner or an admin can see these tickets",
+      });
+    if (agentId) {
+      const agent = getAgent(agentId);
+      if (!canReadRunLog(user, agent.owner_id)) throw denied();
+    } else if (user.role !== "admin" && user.role !== "builder") {
+      throw denied();
+    }
+    return allMockTickets().filter((t) => {
+      if (agentId && t.agent_id !== agentId) return false;
+      return user.role === "admin" || getAgent(t.agent_id).owner_id === user.id;
+    });
+  }
+
+  function loadTicket(user: UserPublic, ticketId: string): TicketDetail {
+    const ticket = allMockTickets().find((t) => t.id === ticketId);
+    if (!ticket) {
+      throw new ApiError(404, { code: "ticket_not_found", message: "Ticket not found" });
+    }
+    if (!canReadRunLog(user, getAgent(ticket.agent_id).owner_id)) {
+      throw new ApiError(403, {
+        code: "forbidden",
+        message: "Only the owner or an admin can see this ticket",
+      });
+    }
+    return ticket;
+  }
+
+  function toListItem(ticket: TicketDetail): TicketListItem {
+    const { answer, note, created_by_name, ...item } = ticket;
+    void answer;
+    void note;
+    void created_by_name;
+    return item;
   }
 
   function requireAdmin(user: UserPublic) {
@@ -232,6 +284,61 @@ export function createMockClient(options: MockClientOptions): ApiClient {
         return { by_agent, by_day };
       }),
 
+    listTickets: (params = {}) =>
+      respond(() => {
+        const user = caller();
+        const visible = visibleTickets(user, params.agentId).filter(
+          (t) => !params.status || t.status === params.status
+        );
+        return paginate(isEmpty() ? [] : visible.map(toListItem), params);
+      }),
+
+    getTicket: (ticketId) => respond(() => ({ ...loadTicket(caller(), ticketId) })),
+
+    resolveTicket: (ticketId) =>
+      respond(() => {
+        const ticket = loadTicket(caller(), ticketId);
+        if (ticket.status !== "resolved") {
+          ticket.status = "resolved";
+          ticket.resolved_at = new Date().toISOString();
+          persistFiledTickets();
+        }
+        return { ...ticket };
+      }),
+
+    saveTicketAsTestCase: (ticketId, body) =>
+      respond(() => {
+        const ticket = loadTicket(caller(), ticketId);
+        return {
+          id: `evc_${ticket.id.slice(4, 12)}`,
+          agent_id: ticket.agent_id,
+          question: ticket.question,
+          expected_strings: body.expected_strings,
+          citation_required: body.citation_required,
+          rubric: body.rubric,
+          origin: "flag",
+          created_at: new Date().toISOString(),
+        };
+      }),
+
+    getAgentDetail: (agentId) =>
+      respond(() => {
+        caller();
+        return mockGetAgentDetail(agentId, { empty: isEmpty() });
+      }),
+
+    listEvalReports: (agentId) =>
+      respond(() => {
+        caller();
+        return mockListEvalReports(agentId, { empty: isEmpty() });
+      }),
+
+    // RUNTIME-PLACEHOLDER(#26): the delay stands in for the time a real eval run takes.
+    deployVersion: (agentId, versionNumber, overrideReason) =>
+      respond(() => mockDeployVersion(agentId, versionNumber, caller(), overrideReason), {
+        delayMs: overrideReason ? latencyMs : 900,
+      }),
+
     getBudget: (agentId) =>
       respond(() => {
         const user = caller();
@@ -262,21 +369,31 @@ export function createMockClient(options: MockClientOptions): ApiClient {
     getAdminQueue: () =>
       respond((): AdminQueue => {
         requireAdmin(caller());
-        const items = isEmpty() ? [] : mockListBudgets();
-        return {
-          items: items
-            .filter((b) => b.state === "paused")
-            .map((b) => ({
-              kind: "budget_pause" as const,
-              agent_id: b.agent_id,
-              agent_name: b.agent_name,
-              spent: b.spent,
-              cap: b.cap,
-              extra_allowance: b.extra_allowance,
-              cap_total: b.cap_total,
-              since: b.updated_at,
-            })),
-        };
+        if (isEmpty()) return { items: [] };
+        // Oldest first within a kind, like a queue; the page groups by kind.
+        const pauses = mockListBudgets()
+          .filter((b) => b.state === "paused")
+          .map((b) => ({
+            kind: "budget_pause" as const,
+            agent_id: b.agent_id,
+            agent_name: b.agent_name,
+            spent: b.spent,
+            cap: b.cap,
+            extra_allowance: b.extra_allowance,
+            cap_total: b.cap_total,
+            since: b.updated_at,
+          }));
+        const tickets = allMockTickets().filter((t) => t.status === "open")
+          .map((t) => ({
+            kind: "open_ticket" as const,
+            ticket_id: t.id,
+            agent_id: t.agent_id,
+            agent_name: t.agent_name,
+            question: t.question,
+            since: t.created_at,
+          }))
+          .reverse();
+        return { items: [...pauses, ...mockBlockedDeploys(), ...tickets] };
       }),
   };
 }

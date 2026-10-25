@@ -21,7 +21,8 @@ const DEFAULT_MODE: ApiMode =
 
 /**
  * The build's mode, overridable per page load with `?api=live` or
- * `?api=mock` (used by the hermetic Playwright tests of the live client).
+ * `?api=mock`. A test hook only: used by the hermetic Playwright tests of the
+ * live client, never linked from the UI.
  */
 export function resolveApiMode(): ApiMode {
   if (typeof window === "undefined") return DEFAULT_MODE;

@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useSearchParams } from "next/navigation";
-import { TopNav } from "@/components/chat/top-nav";
+import { TopNav } from "@/components/shell/top-nav";
 import { ChatSidebar } from "@/components/chat/chat-sidebar";
 import { ChatThread } from "@/components/chat/chat-thread";
 import { Composer } from "@/components/chat/composer";
@@ -14,18 +14,16 @@ import {
   mockSetSpendShare,
   subscribeMockBudgets,
 } from "@/lib/api/mock-budgets";
-import {
-  MOCK_AGENT,
-  getSeedChats,
-  mockContinueRun,
-  mockDecideApproval,
-  mockSendMessage,
-} from "@/lib/mock-chat";
+import { getMockChatAgent, getSeedChats } from "@/lib/mock-chat";
+import { resolveApiMode } from "@/lib/api/config";
+import { createRuntime, runtimeErrorMessage } from "@/lib/api/runtime-seams";
+import { useIdentity } from "@/lib/identity";
 import type {
   ApprovalDecision,
   ApprovalRequest,
   ChatMessage,
   ChatSummary,
+  FlagState,
 } from "@/lib/chat-types";
 import type { StreamEvent } from "@/lib/contracts/events";
 
@@ -63,19 +61,30 @@ export default function ChatPage() {
 
 function ChatPageInner() {
   const searchParams = useSearchParams();
+  // Mock-only test hooks, read from the URL: ?empty, ?chatsError, ?fastStream,
+  // ?decideError, ?flagError and ?budget force states or speed up the fake
+  // stream for Playwright and screenshots. They have no effect on a live backend.
   const forceEmpty = searchParams.get("empty") === "1";
   const forceChatsError = searchParams.get("chatsError") === "1";
   // Tests run the mock stream at a much higher speed so the suite stays
   // fast; the UI still goes through every real event in order.
   const streamSpeed = searchParams.get("fastStream") === "1" ? 0.05 : 1;
   const forceDecideError = searchParams.get("decideError") === "1";
+  const forceFlagError = searchParams.get("flagError") === "1";
   const budgetPreview = searchParams.get("budget");
+  // The agent named by ?agent=<id>, from the mock catalog (mock only).
+  const agent = getMockChatAgent(searchParams.get("agent"));
+
+  // Every runtime-dependent call goes through this seam (lib/api/runtime-seams.ts):
+  // scripted mock events by default, a stub that says what is missing for ?api=live.
+  const [runtime] = useState(() => createRuntime(resolveApiMode()));
+  const { currentUser } = useIdentity();
 
   // The agent's budget state (never its cost) from the mock store, which
   // follows the admin approving spend in another tab.
   const budgetState = useSyncExternalStore(
     subscribeMockBudgets,
-    () => mockBudgetState(MOCK_AGENT.id),
+    () => mockBudgetState(agent.id),
     () => "ok" as const
   );
   const [pausedRun, setPausedRun] = useState<PausedRun | null>(null);
@@ -85,12 +94,12 @@ function ChatPageInner() {
     message: string;
   } | null>(null);
 
-  // Preview/test hook: ?budget=ok|warned|paused sets the mock agent's spend.
+  // Mock-only preview/test hook: ?budget=ok|warned|paused sets the mock agent's spend.
   useEffect(() => {
     if (budgetPreview === "ok" || budgetPreview === "warned" || budgetPreview === "paused") {
-      mockSetSpendShare(MOCK_AGENT.id, BUDGET_PREVIEW_SHARE[budgetPreview]);
+      mockSetSpendShare(agent.id, BUDGET_PREVIEW_SHARE[budgetPreview]);
     }
-  }, [budgetPreview]);
+  }, [budgetPreview, agent.id]);
 
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [chatsState, setChatsState] = useState<"loading" | "error" | "ready">(
@@ -115,13 +124,13 @@ function ChatPageInner() {
           setChatsState("error");
           return;
         }
-        const seeded = forceEmpty ? [] : getSeedChats();
+        const seeded = forceEmpty ? [] : getSeedChats(agent.id);
         setChats(seeded);
         setActiveChatId(seeded[0]?.id ?? null);
         setChatsState("ready");
       }, 350);
     },
-    [forceEmpty, forceChatsError]
+    [forceEmpty, forceChatsError, agent.id]
   );
 
   useEffect(() => {
@@ -294,7 +303,7 @@ function ChatPageInner() {
     setIsStreaming(true);
     let events: AsyncIterable<StreamEvent>;
     try {
-      events = await mockSendMessage(MOCK_AGENT.id, userText, { speed: streamSpeed });
+      events = await runtime.sendMessage(agent.id, userText, { speed: streamSpeed });
     } catch (error) {
       setIsStreaming(false);
       const code = error instanceof ApiError ? error.code : "";
@@ -311,7 +320,7 @@ function ChatPageInner() {
           message:
             error instanceof ApiError && error.status === 409
               ? "An approval is waiting. Decide it first, then try again."
-              : "Couldn't send your message. Try again in a moment.",
+              : runtimeErrorMessage(error, "Couldn't send your message. Try again in a moment."),
         },
       });
       return;
@@ -325,7 +334,7 @@ function ChatPageInner() {
     setContinueNotice(null);
     const run = pausedRun;
     try {
-      const events = await mockContinueRun(MOCK_AGENT.id, run?.userText ?? null, {
+      const events = await runtime.continueRun(agent.id, run?.userText ?? null, {
         speed: streamSpeed,
       });
       setPausedRun(null);
@@ -349,7 +358,10 @@ function ChatPageInner() {
             }
           : {
               kind: "error",
-              message: "Couldn't continue. Check your connection and try again.",
+              message: runtimeErrorMessage(
+                error,
+                "Couldn't continue. Check your connection and try again."
+              ),
             }
       );
     }
@@ -383,14 +395,17 @@ function ChatPageInner() {
 
     let events: AsyncIterable<StreamEvent>;
     try {
-      events = await mockDecideApproval(approvalId, decision, {
+      events = await runtime.decideApproval(approvalId, decision, {
         speed: streamSpeed,
         failFirstAttempt: forceDecideError,
       });
-    } catch {
+    } catch (error) {
       patchApproval(chatId, messageId, {
         status: "pending",
-        error: "Couldn't send your decision. Check your connection and try again.",
+        error: runtimeErrorMessage(
+          error,
+          "Couldn't send your decision. Check your connection and try again."
+        ),
       });
       return;
     }
@@ -414,6 +429,74 @@ function ChatPageInner() {
     await runStream(chatId, continuation.id, events);
   }
 
+  function setFlag(chatId: string, messageId: string, flag: FlagState) {
+    patchAssistantMessage(chatId, messageId, { flag });
+  }
+
+  /** Flags an answer: the re-check streams back as a new message right
+   * after the flagged one, so it clearly follows it. */
+  async function handleFlag(messageId: string) {
+    if (!activeChatId) return;
+    const chatId = activeChatId;
+    const chat = chats.find((c) => c.id === chatId);
+    const flagged = chat?.messages.find((m) => m.id === messageId);
+    // A re-check answer can be flagged too; its question is the one the
+    // original answer it re-checks was asked.
+    const answerId = flagged?.role === "assistant" && flagged.recheckOf ? flagged.recheckOf : messageId;
+    const index = chat?.messages.findIndex((m) => m.id === answerId) ?? -1;
+    const question = index > 0 ? chat?.messages[index - 1] : undefined;
+    if (!chat || !question || question.role !== "user") return;
+
+    setFlag(chatId, messageId, { status: "flagging" });
+    let events: AsyncIterable<StreamEvent>;
+    try {
+      // The ?flagError=1 switch is a mock-only test hook.
+      const flagged = chat.messages[index];
+      events = await runtime.flagAnswer(
+        {
+          agentId: agent.id,
+          messageId,
+          question: question.text,
+          answer: flagged.role === "assistant" ? (flagged.text ?? "") : "",
+          userId: currentUser?.id ?? "usr_end_user",
+        },
+        { speed: streamSpeed, failFirstAttempt: forceFlagError }
+      );
+    } catch (error) {
+      setFlag(chatId, messageId, {
+        status: "error",
+        error: runtimeErrorMessage(
+          error,
+          "Couldn't send your flag. Check your connection and try again."
+        ),
+      });
+      return;
+    }
+
+    setFlag(chatId, messageId, { status: "rechecking" });
+    const recheck: ChatMessage = {
+      id: localId("msg"),
+      role: "assistant",
+      text: null,
+      preview: "",
+      status: "streaming",
+      recheckOf: messageId,
+      createdAt: new Date().toISOString(),
+    };
+    setChats((prev) =>
+      prev.map((c) => {
+        if (c.id !== chatId) return c;
+        const at = c.messages.findIndex((m) => m.id === messageId);
+        const messages = [...c.messages];
+        messages.splice(at + 1, 0, recheck);
+        return { ...c, messages };
+      })
+    );
+    await runStream(chatId, recheck.id, events);
+    setFlag(chatId, messageId, { status: "rechecked" });
+  }
+
+  // RUNTIME-PLACEHOLDER(#15): switching chats is a timed fake of loading a thread; replace with the thread read.
   function handleSelectChat(chatId: string) {
     if (chatId === activeChatId) return;
     setThreadState("loading");
@@ -423,6 +506,7 @@ function ChatPageInner() {
     }, 250);
   }
 
+  // RUNTIME-PLACEHOLDER(#15): a new chat only exists client-side until its first send creates a thread; replace with the thread-create call.
   function handleNewChat() {
     setActiveChatId(null);
     setThreadState("ready");
@@ -470,7 +554,7 @@ function ChatPageInner() {
       <TopNav />
       <div className="flex min-h-0 flex-1">
         <ChatSidebar
-          agent={MOCK_AGENT}
+          agent={agent}
           chats={chats}
           chatsState={chatsState}
           activeChatId={activeChatId}
@@ -481,18 +565,19 @@ function ChatPageInner() {
         />
         <main className="flex min-h-0 flex-1 flex-col">
           {budgetState === "warned" && !showPaused ? (
-            <BudgetWarningBanner agentName={MOCK_AGENT.name} />
+            <BudgetWarningBanner agentName={agent.name} />
           ) : null}
           <ChatThread
             messages={activeMessages}
             threadState={threadState}
-            agentName={MOCK_AGENT.name}
+            agentName={agent.name}
             onRetryMessage={handleRetryMessage}
+            onFlag={handleFlag}
             onDecide={handleDecide}
             footer={
               showPaused ? (
                 <BudgetPausedCard
-                  agentName={MOCK_AGENT.name}
+                  agentName={agent.name}
                   approved={approved}
                   continuing={continuing}
                   notice={continueNotice}
@@ -502,7 +587,7 @@ function ChatPageInner() {
             }
           />
           <Composer
-            agentName={MOCK_AGENT.name}
+            agentName={agent.name}
             disabled={isStreaming || awaitingDecision || showPaused}
             placeholder={
               showPaused

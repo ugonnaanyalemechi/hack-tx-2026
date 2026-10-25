@@ -46,7 +46,7 @@ test.describe("role switcher", () => {
     await expect(primary.getByRole("link", { name: "Admin" })).toHaveCount(0);
   });
 
-  test("the Admin tab opens the run log", async ({ page }) => {
+  test("the Admin tab opens the admin queue", async ({ page }) => {
     await page.goto("/catalog");
     await page
       .getByRole("group", { name: "Viewing as" })
@@ -54,7 +54,7 @@ test.describe("role switcher", () => {
       .click();
     await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Admin" }).click();
 
-    await expect(page).toHaveURL(/\/admin\/runs/);
+    await expect(page).toHaveURL(/\/admin$/);
     await expect(
       page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Admin" })
     ).toHaveAttribute("aria-current", "page");

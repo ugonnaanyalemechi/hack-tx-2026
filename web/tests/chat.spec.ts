@@ -1,6 +1,21 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("chat page", () => {
+  test("?agent= opens that agent's chat with its name and owner", async ({ page }) => {
+    // Policy Assistant, owned by Cleo Builder in the mock catalog.
+    await page.goto("/chat?agent=agt_2d8f5a1b0c3e4f7a9b2c4d6e8f0a1b3c");
+    await expect(page.getByRole("heading", { level: 1, name: "Policy Assistant" })).toBeVisible();
+    await expect(page.getByText("Owner: Cleo Builder")).toBeVisible();
+    await expect(page.getByLabel("Ask Policy Assistant")).toBeVisible();
+    // Only the Filings Analyst has seeded history.
+    await expect(page.getByText("Acme revenue by segment")).toHaveCount(0);
+    await page.screenshot({ path: "tests/__screenshots__/chat-agent-param.png", fullPage: true });
+
+    await page.goto("/chat");
+    await expect(page.getByRole("heading", { level: 1, name: "Filings Analyst" })).toBeVisible();
+    await expect(page.getByText("Owner: Ben Builder")).toBeVisible();
+  });
+
   test("streams a new message and replaces the preview with final guarded text", async ({
     page,
   }) => {

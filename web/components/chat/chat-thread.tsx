@@ -11,6 +11,7 @@ interface ChatThreadProps {
   threadState: "loading" | "ready";
   agentName: string;
   onRetryMessage: (messageId: string) => void;
+  onFlag: (messageId: string) => void;
   /** Rendered after the last message, e.g. the paused card. */
   footer?: ReactNode;
   onDecide: (
@@ -25,6 +26,7 @@ export function ChatThread({
   threadState,
   agentName,
   onRetryMessage,
+  onFlag,
   footer,
   onDecide,
 }: ChatThreadProps) {
@@ -71,6 +73,7 @@ export function ChatThread({
               message={message}
               agentName={agentName}
               onRetry={() => onRetryMessage(message.id)}
+              onFlag={() => onFlag(message.id)}
               onDecide={(decision) => {
                 if (message.approval) {
                   onDecide(message.id, message.approval.id, decision);

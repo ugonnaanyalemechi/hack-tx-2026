@@ -46,8 +46,8 @@ export const MOCK_AGENTS: AgentListItem[] = [
     name: "Policy Assistant",
     description: "Finds the internal policy that applies and quotes the clause.",
     owner_id: "usr_builder_2",
-    live_version_number: 2,
-    latest_version_number: 2,
+    live_version_number: 4,
+    latest_version_number: 5,
   },
   {
     id: MARKET,

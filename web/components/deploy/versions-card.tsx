@@ -31,11 +31,12 @@ function statusBadge(version: AgentVersionOut, liveNumber: number | null) {
 }
 
 /**
- * Only the latest eval report is readable, so other versions show the
- * threshold from their own spec without a score.
+ * A version's score against its threshold. The mock serves a report per
+ * tested version; the live API only exposes the latest report, so other
+ * versions show "—" for the score and the threshold from their own spec.
  */
-function evalCell(version: AgentVersionOut, report: EvalReportOut | null) {
-  if (report?.version_number === version.version_number) {
+function evalCell(version: AgentVersionOut, report: EvalReportOut | undefined) {
+  if (report) {
     return (
       <>
         <span className="text-text-primary tabular-nums">
@@ -49,7 +50,7 @@ function evalCell(version: AgentVersionOut, report: EvalReportOut | null) {
   }
   const minScore = minScoreOf(version);
   return (
-    <span className="text-text-muted tabular-nums" title="Only the latest test run's score is shown">
+    <span className="text-text-muted tabular-nums" title="No test run score for this version">
       — / {minScore !== null ? formatScore(minScore) : "—"}
     </span>
   );
@@ -57,10 +58,11 @@ function evalCell(version: AgentVersionOut, report: EvalReportOut | null) {
 
 export function VersionsCard({
   agent,
-  report,
+  reports,
 }: {
   agent: AgentDetail;
-  report: EvalReportOut | null;
+  /** Newest first; may hold only the latest version's report. */
+  reports: EvalReportOut[];
 }) {
   const titleId = "versions-title";
   const newestFirst = [...agent.versions].reverse();
@@ -94,7 +96,10 @@ export function VersionsCard({
                     <TableCell>
                       <StatusBadge tone={badge.tone}>{badge.label}</StatusBadge>
                     </TableCell>
-                    <TableCell>{evalCell(version, report)}</TableCell>
+                    <TableCell>{evalCell(
+                        version,
+                        reports.find((r) => r.version_number === version.version_number)
+                      )}</TableCell>
                     <TableCell className="text-right text-text-secondary">
                       {DATE.format(new Date(version.created_at))}
                     </TableCell>

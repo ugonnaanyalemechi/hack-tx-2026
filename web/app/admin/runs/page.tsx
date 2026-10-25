@@ -149,7 +149,7 @@ function RunLog() {
                     size="sm"
                     onClick={runs.loadMore}
                     disabled={runs.loadingMore}
-                    className="self-center rounded-pill px-4"
+                    className="self-center px-4"
                   >
                     {runs.loadingMore ? "Loading…" : "Load more"}
                   </Button>

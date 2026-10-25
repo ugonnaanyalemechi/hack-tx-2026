@@ -71,7 +71,7 @@ export function DeployGateCard({
             : pendingExplanation(pendingVersion?.version_number, pendingThreshold)}
         </p>
         {report?.override_reason ? (
-          <blockquote className="rounded-md border border-border-subtle bg-white/3 p-3 text-sm text-text-primary">
+          <blockquote className="rounded-md border border-border-subtle bg-surface-2 p-3 text-sm text-text-primary">
             <span className="mb-1 block font-mono text-overline font-medium tracking-overline text-text-brand uppercase">
               Override reason
             </span>
@@ -127,7 +127,7 @@ function OverrideForm({
           required
           aria-describedby="override-reason-help"
           placeholder={`Why should v${versionNumber} ship below the threshold?`}
-          className="min-h-20 rounded-md border-border-default bg-white/4 px-4 py-3 text-sm"
+          className="min-h-20 rounded-md border-border-default bg-surface-2 px-4 py-3 text-sm"
         />
         <p id="override-reason-help" className="text-xs text-text-muted">
           Required. It is saved on the eval report.
@@ -142,7 +142,7 @@ function OverrideForm({
       <Button
         type="submit"
         disabled={!trimmed || submitting}
-        className="h-10 w-full justify-center gap-1.5 rounded-pill bg-neutral-50 text-sm font-medium text-text-inverse hover:bg-white disabled:bg-white/12 disabled:text-text-disabled disabled:opacity-100"
+        className="h-10 w-full justify-center gap-1.5 bg-neutral-50 text-sm font-medium text-text-inverse hover:bg-white disabled:bg-white/12 disabled:text-text-disabled disabled:opacity-100"
       >
         {submitting ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
         Deploy v{versionNumber} anyway

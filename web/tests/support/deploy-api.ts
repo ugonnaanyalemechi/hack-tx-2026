@@ -19,6 +19,7 @@ import type {
   EvalReportOut,
 } from "../../lib/contracts/evals";
 import type { AgentDetail, AgentVersionOut } from "../../lib/contracts/registry";
+import { MOCK_USERS } from "../../lib/api/mock-data";
 
 export const AGENT_ID = "agt_5f0c2a9e1b7d4c3a8e6f1a2b3c4d5e6f";
 
@@ -260,6 +261,8 @@ export async function fakePlatformApi(page: Page, options: FakeApiOptions) {
 }
 
 function resolve(call: RecordedCall, options: FakeApiOptions): Reply {
+  // The role switcher needs the seeded users, which the live client reads from the API.
+  if (call.method === "GET" && call.path === "/v1/users") return { status: 200, body: MOCK_USERS };
   const base = `/v1/agents/${AGENT_ID}`;
   if (call.method === "GET" && call.path === base) {
     const agent = typeof options.agent === "function" ? options.agent() : options.agent;
@@ -296,6 +299,13 @@ export function deployedResponse(
     eval_report: report,
   };
 }
+
+/**
+ * These tests exercise the live client against the faked API, so they load
+ * the page with `?api=live`; without it the page runs on the mock client
+ * (`lib/api/mock-deploy.ts`), which has its own specs in `deploy-mock.spec.ts`.
+ */
+export const LIVE = "?api=live";
 
 /** Pick a role in the app shell's switcher, as a demo viewer would. */
 export async function actAs(page: Page, role: "Admin" | "Builder" | "End user") {

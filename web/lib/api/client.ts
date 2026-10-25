@@ -24,6 +24,20 @@ import type {
   UsageReport,
   UserPublic,
 } from "@/lib/contracts/api";
+import type { DeployResponse, EvalReportOut } from "@/lib/contracts/evals";
+import type { AgentDetail } from "@/lib/contracts/registry";
+import type {
+  EvalCaseOut,
+  SaveAsTestCaseRequest,
+  TicketDetail,
+  TicketListItem,
+  TicketStatus,
+} from "@/lib/contracts/tickets";
+
+export interface TicketsParams extends PageParams {
+  agentId?: string | null;
+  status?: TicketStatus | null;
+}
 
 export interface RunsParams extends PageParams {
   agentId?: string | null;
@@ -46,6 +60,32 @@ export interface ApiClient {
   getRun(runId: string): Promise<RunDetailWithApprovals>;
   /** `GET /v1/usage`: spend by agent and by day. */
   getUsage(params?: UsageParams): Promise<UsageReport>;
+  /** `GET /v1/tickets`: admin sees all, a builder their own agents'. */
+  listTickets(params?: TicketsParams): Promise<Page<TicketListItem>>;
+  /** `GET /v1/tickets/{id}`. */
+  getTicket(ticketId: string): Promise<TicketDetail>;
+  /** `POST /v1/tickets/{id}/resolve`: idempotent. */
+  resolveTicket(ticketId: string): Promise<TicketDetail>;
+  /** `POST /v1/tickets/{id}/save-as-test-case`: 201 with the new eval case. */
+  saveTicketAsTestCase(ticketId: string, body: SaveAsTestCaseRequest): Promise<EvalCaseOut>;
+  /** `GET /v1/agents/{id}`: the agent with every version (deploy and eval views). */
+  getAgentDetail(agentId: string): Promise<AgentDetail>;
+  /**
+   * Eval reports for the agent, newest first, so `[0]` is the latest test run
+   * and an agent never tested returns `[]`. The live API only exposes the
+   * latest report (`GET /v1/agents/{id}/eval-report`), so live returns at
+   * most one; the mock returns one per tested version.
+   */
+  listEvalReports(agentId: string): Promise<EvalReportOut[]>;
+  /**
+   * `POST /v1/agents/{id}/versions/{n}/deploy`: runs the version through the
+   * eval gate. With `overrideReason`, an admin deploys a blocked version anyway.
+   */
+  deployVersion(
+    agentId: string,
+    versionNumber: number,
+    overrideReason?: string | null
+  ): Promise<DeployResponse>;
   /** `GET /v1/agents/{id}/budget`: admin or the agent's owner only. */
   getBudget(agentId: string): Promise<BudgetOut>;
   /** `POST /v1/agents/{id}/budget/approve`: admin only. No amount grants one more base cap. */

@@ -3,7 +3,7 @@ import type { AgentDetail } from "@/lib/contracts/registry";
 import { casesPassing, formatScore } from "@/components/deploy/gate";
 
 /**
- * Nocturne stat bar: large tabular figure, caption beneath. Cost and ticket
+ * Foundry stat bar: large tabular figure, caption beneath. Cost and ticket
  * counts from the mockup are out of MVP scope for the owner view.
  */
 export function EvalStats({
@@ -29,7 +29,7 @@ export function EvalStats({
   ];
 
   return (
-    <dl className="grid grid-cols-3 rounded-xl border border-border-default bg-white/3">
+    <dl className="grid grid-cols-3 rounded-xl border border-border-default bg-surface-1">
       {stats.map((stat) => (
         <div
           key={stat.caption}

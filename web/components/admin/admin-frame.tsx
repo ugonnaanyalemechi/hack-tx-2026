@@ -17,8 +17,10 @@ import { canOpenAdmin, useIdentity } from "@/lib/identity";
 
 /** Sections under the Admin tab. Add new admin screens here. */
 const ADMIN_SECTIONS = [
+  { label: "Overview", href: "/admin" },
   { label: "Run log", href: "/admin/runs" },
   { label: "Usage", href: "/admin/usage" },
+  { label: "Tickets", href: "/admin/tickets" },
   { label: "Budgets", href: "/admin/budgets" },
 ];
 

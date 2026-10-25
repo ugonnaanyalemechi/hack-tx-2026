@@ -10,17 +10,35 @@
 
 import { ApiError } from "./api/client";
 import { mockBudgetState, mockPauseAtCap } from "./api/mock-budgets";
-import { MOCK_AGENTS } from "./api/mock-data";
+import { MOCK_AGENTS, MOCK_USERS } from "./api/mock-data";
+import { mockFileFlagTicket } from "./api/mock-tickets";
 import type { StreamEvent } from "./contracts/events";
 import type { Agent, ApprovalDecision, ChatSummary } from "./chat-types";
 
-export const MOCK_AGENT: Agent = {
-  // The API's id for Filings Analyst, so the chat and the admin budget view
-  // share one budget (lib/api/mock-budgets.ts).
-  id: MOCK_AGENTS.find((a) => a.slug === "filings-analyst")?.id ?? "agent_filings_analyst",
-  name: "Filings Analyst",
-  ownerName: "Priya",
-};
+const FILINGS_ANALYST = MOCK_AGENTS.find((a) => a.slug === "filings-analyst") ?? MOCK_AGENTS[0];
+
+function toChatAgent(agent: (typeof MOCK_AGENTS)[number]): Agent {
+  return {
+    // The API's id, so the chat and the admin budget view share one budget
+    // (lib/api/mock-budgets.ts).
+    id: agent.id,
+    name: agent.name,
+    ownerName: MOCK_USERS.find((u) => u.id === agent.owner_id)?.name ?? agent.owner_id,
+  };
+}
+
+/** The agent shown when `/chat` has no (or an unknown) `?agent=`. */
+export const MOCK_AGENT: Agent = toChatAgent(FILINGS_ANALYST);
+
+/**
+ * The agent named by `/chat?agent=<id>`, with its name and owner from the
+ * mock catalog. Falls back to Filings Analyst for a missing or unknown id.
+ */
+// RUNTIME-PLACEHOLDER(#15): resolves the agent from the mock catalog fixtures. Replace with the agent read (`GET /v1/agents/{id}`) once the chat page talks to the real thread API.
+export function getMockChatAgent(agentId: string | null): Agent {
+  const found = agentId ? MOCK_AGENTS.find((a) => a.id === agentId) : undefined;
+  return found ? toChatAgent(found) : MOCK_AGENT;
+}
 
 function wait(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -33,8 +51,11 @@ function nextId(prefix: string) {
 }
 
 /** Seed a couple of past chats with realistic finance Q&A so loaded/empty
- * states both have something meaningful to screenshot. */
-export function getSeedChats(): ChatSummary[] {
+ * states both have something meaningful to screenshot. Only the Filings
+ * Analyst has history; any other agent starts with an empty chat list. */
+// RUNTIME-PLACEHOLDER(#15): fixture chat history. Replace with the thread list read (`GET` threads for the agent and user) once the chat API exists.
+export function getSeedChats(agentId: string = MOCK_AGENT.id): ChatSummary[] {
+  if (agentId !== MOCK_AGENT.id) return [];
   return [
     {
       id: "chat_acme_revenue",
@@ -295,6 +316,7 @@ export interface DecideOptions extends StreamOptions {
  *   run_finished(completed). The tool never runs; the agent is told it was
  *   declined and carries on without it.
  */
+// RUNTIME-PLACEHOLDER(#24): fakes the approval decision call and the resumed run's stream (approve runs the tool, reject skips it). Replace with the real decide endpoint, which resumes the stopped run and streams StreamEvents.
 export async function mockDecideApproval(
   approvalId: string,
   decision: ApprovalDecision,
@@ -344,6 +366,86 @@ async function* decisionStream(
   }
   await delay(100);
   yield { type: "message_complete", text: answer };
+  yield { type: "run_finished", status: "completed" };
+}
+
+const failedFlags = new Set<string>();
+
+export interface FlagOptions extends StreamOptions {
+  /** Fail the first flag call for each answer, to exercise the error state;
+   * the retry then goes through. */
+  failFirstAttempt?: boolean;
+  /** Who flagged which answer; the mock backend files a ticket from it. */
+  ticket?: { agentId: string; answer: string; userId: string };
+}
+
+/**
+ * Simulates the flag call (POST, owner:runtime, not built yet; no flag
+ * route or event exists in the contract). Like a real fetch it rejects if
+ * the request fails and resolves once the response stream opens. The stream
+ * is the immediate re-check run: run_started -> tool_call -> tool_result ->
+ * tokens -> message_complete -> run_finished(completed).
+ */
+// RUNTIME-PLACEHOLDER(#30): fakes the flag call (POST that files a ticket and streams the re-check). Replace with the live flag call behind `flagAnswer` in web/lib/api/runtime-seams.ts; the mock files the ticket itself (mock-tickets.ts), the real flag route must too.
+export async function mockFlagAnswer(
+  flaggedMessageId: string,
+  userText: string,
+  opts: FlagOptions = {}
+): Promise<AsyncIterable<StreamEvent>> {
+  const speed = opts.speed ?? 1;
+  const delay = (ms: number) => wait(ms * speed);
+
+  await delay(600);
+  if (opts.failFirstAttempt && !failedFlags.has(flaggedMessageId)) {
+    failedFlags.add(flaggedMessageId);
+    throw new Error("network_error");
+  }
+  const recheckRunId = `run_recheck_${nextId("r")}`;
+  if (opts.ticket) {
+    const agent = MOCK_AGENTS.find((a) => a.id === opts.ticket?.agentId);
+    mockFileFlagTicket({
+      agentId: opts.ticket.agentId,
+      agentName: agent?.name ?? MOCK_AGENT.name,
+      question: userText,
+      answer: opts.ticket.answer,
+      userId: opts.ticket.userId,
+      userName: MOCK_USERS.find((u) => u.id === opts.ticket?.userId)?.name ?? null,
+      runId: `run_flagged_${flaggedMessageId}`,
+      recheckRunId,
+    });
+  }
+  return recheckStream(userText, delay, recheckRunId);
+}
+
+// RUNTIME-PLACEHOLDER(#30): scripted re-check events (canned answer built from the question). Replace with the SSE stream of the real re-check run.
+async function* recheckStream(
+  userText: string,
+  delay: (ms: number) => Promise<void>,
+  runId: string
+): AsyncGenerator<StreamEvent> {
+  const answer = pickAnswer(userText);
+  yield { type: "run_started", run_id: runId };
+  await delay(120);
+
+  yield { type: "tool_call", name: "search_filings", input: { query: userText } };
+  await delay(answer.toolSeconds * 120);
+  yield {
+    type: "tool_result",
+    name: "search_filings",
+    output: {
+      duration_ms: Math.round(answer.toolSeconds * 1000),
+      citations: answer.citations,
+    },
+  };
+  await delay(60);
+
+  const text = `I checked this against the filing again. ${answer.finalText} The figures match the cited pages.`;
+  for (const tok of tokenize(text)) {
+    yield { type: "token", text: tok };
+    await delay(18);
+  }
+  await delay(100);
+  yield { type: "message_complete", text };
   yield { type: "run_finished", status: "completed" };
 }
 

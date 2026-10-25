@@ -129,7 +129,7 @@ export function ApprovalCard({
                 variant="outline"
                 disabled={deciding}
                 onClick={() => onDecide("reject")}
-                className="h-10 gap-2 rounded-pill border-border-default bg-transparent px-4.5 text-sm text-text-primary hover:border-border-strong hover:bg-white/6"
+                className="h-10 gap-2 border-border-default bg-transparent px-4.5 text-sm text-text-primary hover:border-border-strong hover:bg-white/6"
               >
                 {deciding && approval.decision === "reject" ? (
                   <InFlight label="Rejecting…" />
@@ -141,7 +141,7 @@ export function ApprovalCard({
                 type="button"
                 disabled={deciding}
                 onClick={() => onDecide("approve")}
-                className="h-10 gap-2 rounded-pill bg-molten px-4.5 text-sm font-medium text-text-inverse hover:brightness-110"
+                className="h-10 gap-2 bg-molten px-4.5 text-sm font-medium text-text-inverse hover:brightness-110"
               >
                 {deciding && approval.decision === "approve" ? (
                   <InFlight label="Approving…" />

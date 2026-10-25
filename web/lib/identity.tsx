@@ -89,6 +89,7 @@ function parseStored(raw: string | null): StoredIdentity | null {
   return null;
 }
 
+/** Mock-only test hook: `?mock=loading|empty|error` forces a state for screenshots and tests. */
 function mockScenario(): MockScenario {
   const value = new URLSearchParams(window.location.search).get("mock");
   return value === "loading" || value === "empty" || value === "error" ? value : null;

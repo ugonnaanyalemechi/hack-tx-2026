@@ -7,11 +7,12 @@ import {
   blockedReport,
   deployedResponse,
   fakePlatformApi,
+  LIVE,
   passingReport,
   version,
 } from "./support/deploy-api";
 
-const PAGE = `/agents/${AGENT_ID}/evals`;
+const PAGE = `/agents/${AGENT_ID}/evals${LIVE}`;
 
 test.describe("deploy and eval views", () => {
   test("a blocked version is marked with its score and threshold", async ({ page }) => {

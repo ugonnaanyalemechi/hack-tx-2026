@@ -33,15 +33,21 @@ export function AssistantMessage({
   agentName,
   onRetry,
   onDecide,
+  onFlag,
 }: {
   message: Extract<ChatMessage, { role: "assistant" }>;
   agentName: string;
   onRetry: () => void;
   onDecide: (decision: ApprovalDecision) => void;
+  onFlag: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   const displayText = message.text ?? message.preview;
   const isLive = message.status === "streaming" && message.text === null;
+  const flagStatus = message.flag?.status;
+  // A failed flag can be retried, so it does not count as flagged.
+  const isFlagged = flagStatus !== undefined && flagStatus !== "error";
+  const isInFlight = flagStatus === "flagging" || flagStatus === "rechecking";
 
   async function handleCopy() {
     if (!message.text) return;
@@ -57,6 +63,11 @@ export function AssistantMessage({
 
   return (
     <div className="flex flex-col gap-2">
+      {message.recheckOf ? (
+        <Badge variant="brand" className="w-fit">
+          Re-checked answer
+        </Badge>
+      ) : null}
       {message.toolNote ? (
         <div className="flex items-center gap-1.5 text-sm text-text-muted">
           {message.toolNote.status === "running" && message.paused ? (
@@ -86,7 +97,7 @@ export function AssistantMessage({
             variant="outline"
             size="sm"
             onClick={onRetry}
-            className="w-fit gap-1.5 rounded-pill"
+            className="w-fit gap-1.5"
           >
             <RotateCcw className="size-3.5" aria-hidden />
             Try again
@@ -140,13 +151,12 @@ export function AssistantMessage({
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={() => {
-                  /* Flag/re-check flow is owned by #31 and #25; no-op here. */
-                }}
-                className="h-7 gap-1.5 rounded-pill px-2.5 text-xs text-text-muted hover:text-text-primary"
+                onClick={onFlag}
+                disabled={isFlagged}
+                className="h-7 gap-1.5 px-2.5 text-xs text-text-muted hover:text-text-primary"
               >
                 <Flag className="size-3.5" aria-hidden />
-                Flag
+                {isFlagged ? "Flagged" : "Flag"}
               </Button>
               <Button
                 type="button"
@@ -154,12 +164,30 @@ export function AssistantMessage({
                 size="sm"
                 onClick={handleCopy}
                 disabled={!message.text}
-                className="h-7 gap-1.5 rounded-pill px-2.5 text-xs text-text-muted hover:text-text-primary"
+                className="h-7 gap-1.5 px-2.5 text-xs text-text-muted hover:text-text-primary"
               >
                 <Copy className="size-3.5" aria-hidden />
                 {copied ? "Copied" : "Copy"}
               </Button>
+              {isInFlight ? <Badge variant="info">Re-checking</Badge> : null}
+              {flagStatus === "rechecked" ? <Badge variant="success">Re-check done</Badge> : null}
             </div>
+          ) : null}
+
+          {isInFlight || flagStatus === "rechecked" ? (
+            <p
+              role="status"
+              className="max-w-[75%] rounded-lg border border-border-default bg-surface-2 px-4 py-3 text-sm text-text-secondary"
+            >
+              {flagStatus === "rechecked"
+                ? "Your flag was sent to the builder with this run attached. The re-checked answer is below."
+                : "Your flag was sent to the builder with this run attached. Re-check in progress."}
+            </p>
+          ) : null}
+          {flagStatus === "error" ? (
+            <p role="alert" className="max-w-[75%] text-sm text-error">
+              {message.flag?.error ?? "Couldn't send your flag. Try again."}
+            </p>
           ) : null}
         </>
       )}
