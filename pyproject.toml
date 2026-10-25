@@ -39,7 +39,7 @@ dev = [
 
 [tool.ruff]
 line-length = 100
-extend-exclude = ["migrations/versions"]
+extend-exclude = ["migrations/versions", ".claude"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
@@ -51,3 +51,5 @@ disallow_untyped_defs = false
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
+testpaths = ["tests"]
+norecursedirs = [".claude", ".git", ".venv", "node_modules", "web"]
