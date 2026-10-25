@@ -6,8 +6,19 @@ import { TopNav } from "@/components/chat/top-nav";
 import { ChatSidebar } from "@/components/chat/chat-sidebar";
 import { ChatThread } from "@/components/chat/chat-thread";
 import { Composer } from "@/components/chat/composer";
-import { MOCK_AGENT, getSeedChats, mockChatStream } from "@/lib/mock-chat";
-import type { ChatMessage, ChatSummary } from "@/lib/chat-types";
+import {
+  MOCK_AGENT,
+  getSeedChats,
+  mockChatStream,
+  mockDecideApproval,
+} from "@/lib/mock-chat";
+import type {
+  ApprovalDecision,
+  ApprovalRequest,
+  ChatMessage,
+  ChatSummary,
+} from "@/lib/chat-types";
+import type { StreamEvent } from "@/lib/contracts/events";
 
 type AssistantMessage = Extract<ChatMessage, { role: "assistant" }>;
 
@@ -37,6 +48,7 @@ function ChatPageInner() {
   // Tests run the mock stream at a much higher speed so the suite stays
   // fast; the UI still goes through every real event in order.
   const streamSpeed = searchParams.get("fastStream") === "1" ? 0.05 : 1;
+  const forceDecideError = searchParams.get("decideError") === "1";
 
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [chatsState, setChatsState] = useState<"loading" | "error" | "ready">(
@@ -100,11 +112,15 @@ function ChatPageInner() {
     );
   }
 
-  async function runStream(chatId: string, assistantId: string, text: string) {
+  async function runStream(
+    chatId: string,
+    assistantId: string,
+    events: AsyncIterable<StreamEvent>
+  ) {
     setIsStreaming(true);
     let preview = "";
     try {
-      for await (const event of mockChatStream(text, { speed: streamSpeed })) {
+      for await (const event of events) {
         switch (event.type) {
           case "run_started":
             break;
@@ -156,9 +172,21 @@ function ChatPageInner() {
             );
             break;
           case "approval_required":
+            patchAssistantMessage(chatId, assistantId, (m) => ({
+              ...m,
+              // Tokens are preview-only: if no message_complete carried
+              // guarded text before the pause, the preview must not stay.
+              preview: "",
+              approval: {
+                id: event.approval_id,
+                toolName: event.tool_name,
+                toolInput: event.tool_input,
+                status: "pending",
+              },
+            }));
+            break;
           case "budget_paused":
-            // Approval and budget-pause UI are owned by separate tickets
-            // (#25 / budget ladder work); not exercised by this mock.
+            // Budget-pause UI is owned by the budget ladder ticket (#23).
             break;
         }
       }
@@ -206,7 +234,70 @@ function ChatPageInner() {
     });
     setActiveChatId(chatId);
 
-    void runStream(chatId, assistantMsg.id, text);
+    void runStream(
+      chatId,
+      assistantMsg.id,
+      mockChatStream(text, { speed: streamSpeed })
+    );
+  }
+
+  function patchApproval(
+    chatId: string,
+    messageId: string,
+    patch: Partial<ApprovalRequest>
+  ) {
+    patchAssistantMessage(chatId, messageId, (m) =>
+      m.approval ? { ...m, approval: { ...m.approval, ...patch } } : m
+    );
+  }
+
+  /** Sends the user's decision. Deciding is a new streaming call that
+   * resumes the stopped run; its events land in a new assistant message
+   * under the card. */
+  async function handleDecide(
+    messageId: string,
+    approvalId: string,
+    decision: ApprovalDecision
+  ) {
+    if (!activeChatId) return;
+    const chatId = activeChatId;
+    patchApproval(chatId, messageId, {
+      status: "deciding",
+      decision,
+      error: undefined,
+    });
+
+    let events: AsyncIterable<StreamEvent>;
+    try {
+      events = await mockDecideApproval(approvalId, decision, {
+        speed: streamSpeed,
+        failFirstAttempt: forceDecideError,
+      });
+    } catch {
+      patchApproval(chatId, messageId, {
+        status: "pending",
+        error: "Couldn't send your decision. Check your connection and try again.",
+      });
+      return;
+    }
+
+    patchApproval(chatId, messageId, {
+      status: decision === "approve" ? "approved" : "rejected",
+    });
+    const continuation: ChatMessage = {
+      id: localId("msg"),
+      role: "assistant",
+      text: null,
+      preview: "",
+      status: "streaming",
+      createdAt: new Date().toISOString(),
+    };
+    setChats((prev) =>
+      prev.map((c) =>
+        c.id === chatId ? { ...c, messages: [...c.messages, continuation] } : c
+      )
+    );
+    await runStream(chatId, continuation.id, events);
   }
 
   function handleSelectChat(chatId: string) {
@@ -240,11 +331,22 @@ function ChatPageInner() {
       guardNote: undefined,
       citations: undefined,
     });
-    void runStream(activeChatId, messageId, userMessage.text);
+    void runStream(
+      activeChatId,
+      messageId,
+      mockChatStream(userMessage.text, { speed: streamSpeed })
+    );
   }
 
   const activeMessages =
     chats.find((c) => c.id === activeChatId)?.messages ?? [];
+  // The run is stopped on an approval card; nothing else can be sent in
+  // this chat until the user decides.
+  const awaitingDecision = activeMessages.some(
+    (m) =>
+      m.role === "assistant" &&
+      (m.approval?.status === "pending" || m.approval?.status === "deciding")
+  );
 
   return (
     <div className="flex min-h-dvh flex-col bg-canvas">
@@ -265,10 +367,14 @@ function ChatPageInner() {
             threadState={threadState}
             agentName={MOCK_AGENT.name}
             onRetryMessage={handleRetryMessage}
+            onDecide={handleDecide}
           />
           <Composer
             agentName={MOCK_AGENT.name}
-            disabled={isStreaming}
+            disabled={isStreaming || awaitingDecision}
+            placeholder={
+              awaitingDecision ? "Waiting for your decision" : undefined
+            }
             onSend={sendMessage}
           />
         </main>

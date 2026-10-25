@@ -9,7 +9,7 @@
  */
 
 import type { StreamEvent } from "./contracts/events";
-import type { Agent, ChatSummary } from "./chat-types";
+import type { Agent, ApprovalDecision, ChatSummary } from "./chat-types";
 
 export const MOCK_AGENT: Agent = {
   id: "agent_filings_analyst",
@@ -202,6 +202,146 @@ function tokenize(text: string): string[] {
   return parts ?? [text];
 }
 
+/** The demo agent's one side-effect tool (src/hack_tx_2026/demo/filings.py:
+ * save_note(text)). It only runs when the user asks for a note to be saved. */
+const SIDE_EFFECT_TOOL = "save_note";
+
+function wantsSavedNote(userText: string): boolean {
+  const q = userText.toLowerCase();
+  return q.includes("save") && q.includes("note");
+}
+
+/**
+ * The approval path of the chat stream: the agent looks the figure up,
+ * explains what it wants to do, then asks to run save_note.
+ * run_started -> tokens -> tool_call -> tool_result -> tokens ->
+ * message_complete -> approval_required -> run_finished(awaiting_approval).
+ */
+async function* saveNoteUntilApproval(
+  userText: string,
+  runId: string,
+  delay: (ms: number) => Promise<void>
+): AsyncGenerator<StreamEvent> {
+  for (const tok of tokenize("Let me check the filings for that. ")) {
+    yield { type: "token", text: tok };
+    await delay(25);
+  }
+  yield { type: "tool_call", name: "search_filings", input: { query: userText } };
+  await delay(1.4 * 120);
+  yield {
+    type: "tool_result",
+    name: "search_filings",
+    output: { duration_ms: 1400, citations: ["10-K · p.47"] },
+  };
+  await delay(60);
+
+  const explanation =
+    "Acme's cloud revenue grew 18% in fiscal 2025, to $2.1B. I'd like to save that as a note for you.";
+  for (const tok of tokenize(explanation)) {
+    yield { type: "token", text: tok };
+    await delay(18);
+  }
+  await delay(100);
+  yield { type: "message_complete", text: explanation };
+
+  const approval: PendingApproval = {
+    runId,
+    toolName: SIDE_EFFECT_TOOL,
+    toolInput: {
+      text: "Acme cloud revenue grew 18% in fiscal 2025, to $2.1B (10-K · p.47).",
+    },
+  };
+  const approvalId = nextId("apr");
+  pendingApprovals.set(approvalId, approval);
+  yield {
+    type: "approval_required",
+    approval_id: approvalId,
+    tool_name: approval.toolName,
+    tool_input: approval.toolInput,
+  };
+  yield { type: "run_finished", status: "awaiting_approval" };
+}
+
+/** What the mock backend remembers about a run stopped on an approval, so
+ * the decide call can resume it. */
+interface PendingApproval {
+  runId: string;
+  toolName: string;
+  toolInput: Record<string, unknown>;
+}
+
+const pendingApprovals = new Map<string, PendingApproval>();
+const failedDecisions = new Set<string>();
+
+export interface DecideOptions extends StreamOptions {
+  /** Fail the first decide call for each approval, to exercise the card's
+   * error state; the retry then goes through. */
+  failFirstAttempt?: boolean;
+}
+
+/**
+ * Simulates the decide call (POST, owner:runtime #24, not built yet). Like
+ * a real fetch, it rejects if the request fails and resolves once the
+ * response stream opens. The stream resumes the same run:
+ *
+ * approve: run_started -> tool_call -> tool_result -> tokens ->
+ *   message_complete -> run_finished(completed).
+ * reject: run_started -> tokens -> message_complete ->
+ *   run_finished(completed). The tool never runs; the agent is told it was
+ *   declined and carries on without it.
+ */
+export async function mockDecideApproval(
+  approvalId: string,
+  decision: ApprovalDecision,
+  opts: DecideOptions = {}
+): Promise<AsyncIterable<StreamEvent>> {
+  const speed = opts.speed ?? 1;
+  const delay = (ms: number) => wait(ms * speed);
+
+  await delay(800);
+  if (opts.failFirstAttempt && !failedDecisions.has(approvalId)) {
+    failedDecisions.add(approvalId);
+    throw new Error("network_error");
+  }
+  const approval = pendingApprovals.get(approvalId);
+  if (!approval) throw new Error("approval_not_found");
+  pendingApprovals.delete(approvalId);
+
+  return decisionStream(approval, decision, delay);
+}
+
+async function* decisionStream(
+  approval: PendingApproval,
+  decision: ApprovalDecision,
+  delay: (ms: number) => Promise<void>
+): AsyncGenerator<StreamEvent> {
+  yield { type: "run_started", run_id: approval.runId };
+  await delay(60);
+
+  let answer: string;
+  if (decision === "approve") {
+    yield { type: "tool_call", name: approval.toolName, input: approval.toolInput };
+    await delay(0.3 * 120);
+    yield {
+      type: "tool_result",
+      name: approval.toolName,
+      output: { duration_ms: 300, status: "recorded", note_id: nextId("note") },
+    };
+    await delay(60);
+    answer = "Done. I saved the note about Acme's 18% cloud revenue growth.";
+  } else {
+    answer = "Okay, I didn't save the note. The figures above are still here if you need them.";
+  }
+
+  for (const tok of tokenize(answer)) {
+    yield { type: "token", text: tok };
+    await delay(18);
+  }
+  await delay(100);
+  yield { type: "message_complete", text: answer };
+  yield { type: "run_finished", status: "completed" };
+}
+
 export interface StreamOptions {
   /** Real timers slow Playwright down; tests pass a small multiplier. */
   speed?: number;
@@ -214,6 +354,9 @@ export interface StreamOptions {
  *
  * The special input "trigger: error" simulates the failure path instead:
  * run_started -> a couple of tokens -> error -> run_finished(failed).
+ *
+ * Asking to save a note takes the approval path (saveNoteUntilApproval),
+ * which ends with run_finished(awaiting_approval).
  */
 export async function* mockChatStream(
   userText: string,
@@ -238,6 +381,11 @@ export async function* mockChatStream(
       message: "The model provider timed out. Try again in a moment.",
     };
     yield { type: "run_finished", status: "failed" };
+    return;
+  }
+
+  if (wantsSavedNote(userText)) {
+    yield* saveNoteUntilApproval(userText, runId, delay);
     return;
   }
 
