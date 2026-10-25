@@ -16,6 +16,13 @@ export default function AdminHome() {
     api.getAdminQueue()
   );
 
+  // RUNTIME-PLACEHOLDER(#56): connector requests have no backend route; the
+  // mock serves them and live rejects. A failure here only hides the section.
+  const connectors = useApiQuery(role === "admin" ? "admin-connector-requests" : null, (api) =>
+    api.listConnectorRequests()
+  );
+  const connectorRequests = connectors.status === "ready" ? connectors.data : [];
+
   return (
     <AdminFrame
       section="Overview"
@@ -39,12 +46,12 @@ export default function AdminHome() {
           message={queue.error.message}
           onRetry={queue.retry}
         />
-      ) : queue.data.items.length === 0 ? (
+      ) : queue.data.items.length === 0 && connectorRequests.length === 0 ? (
         <EmptyState icon={CheckCircle2} title="Nothing is waiting on you.">
-          Paused budgets, blocked deploys and open flag tickets show up here.
+          Paused budgets, blocked deploys, open flag tickets and connector requests show up here.
         </EmptyState>
       ) : (
-        <AdminQueueView queue={queue.data} />
+        <AdminQueueView queue={queue.data} connectorRequests={connectorRequests} />
       )}
     </AdminFrame>
   );

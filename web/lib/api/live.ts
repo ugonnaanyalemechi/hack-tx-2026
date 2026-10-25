@@ -118,6 +118,17 @@ export function createLiveClient(options: LiveClientOptions): ApiClient {
       ),
     listBudgets: () => get("/v1/admin/budgets"),
     getAdminQueue: () => get("/v1/admin/queue"),
+    // RUNTIME-PLACEHOLDER(#56): replace with GET /v1/admin/connector-requests once platform builds it.
+    listConnectorRequests: () =>
+      Promise.reject(new RuntimeNotAvailableError("Connector requests aren't available yet", 56)),
+    // RUNTIME-PLACEHOLDER(#56): replace with POST /v1/admin/connector-requests/{id}/decision (approve creates the grant via POST /v1/connectors/{id}/grants).
+    decideConnectorRequest: () =>
+      Promise.reject(
+        new RuntimeNotAvailableError("Deciding a connector request isn't available yet", 56)
+      ),
+    // RUNTIME-PLACEHOLDER(#56): replace with GET /v1/admin/connector-grants (needs tool descriptions, #55).
+    listConnectorGrants: () =>
+      Promise.reject(new RuntimeNotAvailableError("Connector grants aren't available yet", 56)),
     validateAgentSpec: (specYaml) => post("/v1/agents/validate", { spec_yaml: specYaml }),
     createAgent: (specYaml) => post("/v1/agents", { spec_yaml: specYaml }),
     addAgentVersion: (agentId, specYaml) =>

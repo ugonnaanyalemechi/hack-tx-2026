@@ -10,6 +10,7 @@ import type {
   BudgetPauseItem,
   OpenTicketItem,
 } from "@/lib/contracts/budgets";
+import type { ConnectorRequest } from "@/lib/contracts/connectors";
 import { formatCost, formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -76,7 +77,14 @@ function QueueSection({
 }
 
 /** What is waiting on an admin, grouped by kind, each row linking to the page that clears it. */
-export function AdminQueueView({ queue }: { queue: AdminQueue }) {
+export function AdminQueueView({
+  queue,
+  connectorRequests = [],
+}: {
+  queue: AdminQueue;
+  /** Pending connector requests; fetched separately, so the shared queue contract is untouched. */
+  connectorRequests?: ConnectorRequest[];
+}) {
   const pauses = queue.items.filter((i): i is BudgetPauseItem => i.kind === "budget_pause");
   const blocked = queue.items.filter((i): i is BlockedDeployItem => i.kind === "blocked_deploy");
   const tickets = queue.items.filter((i): i is OpenTicketItem => i.kind === "open_ticket");
@@ -88,6 +96,11 @@ export function AdminQueueView({ queue }: { queue: AdminQueue }) {
           { label: "Budget pauses", value: String(pauses.length), testId: "queue-pauses" },
           { label: "Blocked deploys", value: String(blocked.length), testId: "queue-blocked" },
           { label: "Open flag tickets", value: String(tickets.length), testId: "queue-tickets" },
+          {
+            label: "Connector requests",
+            value: String(connectorRequests.length),
+            testId: "queue-connectors",
+          },
         ]}
       />
       <div className="grid gap-6 lg:grid-cols-2">
@@ -134,6 +147,23 @@ export function AdminQueueView({ queue }: { queue: AdminQueue }) {
               badge={<Badge variant="warning">Open</Badge>}
               href="/admin/tickets"
               action="Open tickets"
+            />
+          ))}
+        </QueueSection>
+
+        <QueueSection
+          title="Connector requests"
+          count={connectorRequests.length}
+          empty="No connector is waiting for approval."
+        >
+          {connectorRequests.map((item) => (
+            <QueueRow
+              key={item.id}
+              title={item.connector_name}
+              detail={`${item.agent_name} · ${item.scope === "read_only" ? "read only" : "can change things"} · ${formatDateTime(item.requested_at)}`}
+              badge={<Badge variant="warning">Pending</Badge>}
+              href="/admin/connectors"
+              action="Review"
             />
           ))}
         </QueueSection>
