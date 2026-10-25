@@ -58,6 +58,9 @@ export type ChatMessage =
       guardNote?: string;
       /** Set when this run stopped at a side-effect tool for approval. */
       approval?: ApprovalRequest;
+      /** Set when the run stopped because the agent hit its budget. The
+       * saved message stays; Continue resumes it. */
+      paused?: boolean;
       /** Set when the run ended in error instead of a completed message. */
       error?: { code: string; message: string };
       status: "streaming" | "done" | "error";

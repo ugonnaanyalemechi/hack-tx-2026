@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { MessageSquare } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AssistantMessage, UserBubble } from "@/components/chat/message-row";
@@ -11,6 +11,8 @@ interface ChatThreadProps {
   threadState: "loading" | "ready";
   agentName: string;
   onRetryMessage: (messageId: string) => void;
+  /** Rendered after the last message, e.g. the paused card. */
+  footer?: ReactNode;
   onDecide: (
     messageId: string,
     approvalId: string,
@@ -23,13 +25,14 @@ export function ChatThread({
   threadState,
   agentName,
   onRetryMessage,
+  footer,
   onDecide,
 }: ChatThreadProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" });
-  }, [messages]);
+  }, [messages, footer]);
 
   if (threadState === "loading") {
     return (
@@ -40,7 +43,7 @@ export function ChatThread({
     );
   }
 
-  if (messages.length === 0) {
+  if (messages.length === 0 && !footer) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
         <MessageSquare className="size-8 text-text-disabled" aria-hidden />
@@ -77,6 +80,7 @@ export function ChatThread({
           )}
         </div>
       ))}
+      {footer}
       <div ref={bottomRef} />
     </div>
   );

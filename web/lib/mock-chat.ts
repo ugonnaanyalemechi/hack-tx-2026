@@ -8,11 +8,16 @@
  * real contract now and swapped to a real client later without UI changes.
  */
 
+import { ApiError } from "./api/client";
+import { mockBudgetState, mockPauseAtCap } from "./api/mock-budgets";
+import { MOCK_AGENTS } from "./api/mock-data";
 import type { StreamEvent } from "./contracts/events";
 import type { Agent, ApprovalDecision, ChatSummary } from "./chat-types";
 
 export const MOCK_AGENT: Agent = {
-  id: "agent_filings_analyst",
+  // The API's id for Filings Analyst, so the chat and the admin budget view
+  // share one budget (lib/api/mock-budgets.ts).
+  id: MOCK_AGENTS.find((a) => a.slug === "filings-analyst")?.id ?? "agent_filings_analyst",
   name: "Filings Analyst",
   ownerName: "Priya",
 };
@@ -433,3 +438,101 @@ export async function* mockChatStream(
   yield { type: "run_finished", status: "completed" };
 }
 
+/** The input that makes the mock agent run out of budget mid-run. */
+const BUDGET_TRIGGER = "trigger: budget";
+
+function isBudgetTrigger(userText: string): boolean {
+  return userText.trim().toLowerCase() === BUDGET_TRIGGER;
+}
+
+/**
+ * The budget-pause path of the chat stream: the run starts, a tool call is
+ * in flight, then the agent's spend reaches its cap.
+ * run_started -> tokens -> tool_call -> budget_paused ->
+ * run_finished(paused). The connection closes; nothing else follows.
+ */
+// RUNTIME-PLACEHOLDER(#22): fakes the budget pause (spend crossing the cap flips the shared mock store). Replaced by the real gateway budget hook ending the run with budget_paused.
+async function* pauseAtBudget(
+  agentId: string,
+  delay: (ms: number) => Promise<void>
+): AsyncGenerator<StreamEvent> {
+  for (const tok of tokenize("Let me check the filings for that. ")) {
+    yield { type: "token", text: tok };
+    await delay(25);
+  }
+  yield { type: "tool_call", name: "search_filings", input: { query: "budget" } };
+  await delay(200);
+  mockPauseAtCap(agentId);
+  yield { type: "budget_paused", agent_id: agentId };
+  yield { type: "run_finished", status: "paused" };
+}
+
+/**
+ * Simulates sending a message (the chat POST, owner:runtime #15, not built
+ * yet). Like the real endpoint it answers 409 `budget_paused` while the
+ * agent is paused, before any stream opens, so the UI keeps the chat.
+ * The input "trigger: budget" streams a run that pauses at the cap.
+ */
+// RUNTIME-PLACEHOLDER(#15): fakes the chat send call and its SSE stream, including the 409 `budget_paused` answer while paused. Replaced by the streaming chat endpoint; the UI already consumes the StreamEvent contract.
+export async function mockSendMessage(
+  agentId: string,
+  userText: string,
+  opts: StreamOptions = {}
+): Promise<AsyncIterable<StreamEvent>> {
+  const speed = opts.speed ?? 1;
+  const delay = (ms: number) => wait(ms * speed);
+  await delay(300);
+  // RUNTIME-PLACEHOLDER(#15): the real 409 comes from the send endpoint's resume checks.
+  if (mockBudgetState(agentId) === "paused") {
+    throw new ApiError(409, {
+      code: "budget_paused",
+      message: "This agent is paused until an admin approves more spend.",
+    });
+  }
+  if (isBudgetTrigger(userText)) {
+    return (async function* () {
+      yield { type: "run_started", run_id: nextId("run") } as StreamEvent;
+      await delay(120);
+      yield* pauseAtBudget(agentId, delay);
+    })();
+  }
+  return mockChatStream(userText, opts);
+}
+
+/**
+ * Simulates Continue on a paused chat: 409 `budget_paused` until an admin
+ * has approved more spend, then the stopped run picks up from the saved
+ * message. Resolves null when there is no stopped message to pick up.
+ */
+// RUNTIME-PLACEHOLDER(#22): fakes Continue, a 409 `budget_paused` until an admin approves, then resuming the stopped run. Replaced by the real resume endpoint (name and body not defined yet).
+export async function mockContinueRun(
+  agentId: string,
+  userText: string | null,
+  opts: StreamOptions = {}
+): Promise<AsyncIterable<StreamEvent> | null> {
+  const speed = opts.speed ?? 1;
+  const delay = (ms: number) => wait(ms * speed);
+  await delay(300);
+  // RUNTIME-PLACEHOLDER(#22): the real 409 comes from the resume endpoint while the budget is still paused.
+  if (mockBudgetState(agentId) === "paused") {
+    throw new ApiError(409, {
+      code: "budget_paused",
+      message: "An admin hasn't approved more spend yet.",
+    });
+  }
+  if (userText === null) return null;
+  if (!isBudgetTrigger(userText)) return mockChatStream(userText, opts);
+  return (async function* () {
+    yield { type: "run_started", run_id: nextId("run") } as StreamEvent;
+    await delay(120);
+    yield { type: "tool_result", name: "search_filings", output: { duration_ms: 900, citations: ["10-K · p.47"] } } as StreamEvent;
+    const answer = "Acme's cloud revenue grew 18% in fiscal 2025, to $2.1B.";
+    for (const tok of tokenize(answer)) {
+      yield { type: "token", text: tok };
+      await delay(18);
+    }
+    await delay(100);
+    yield { type: "message_complete", text: answer };
+    yield { type: "run_finished", status: "completed" };
+  })();
+}
