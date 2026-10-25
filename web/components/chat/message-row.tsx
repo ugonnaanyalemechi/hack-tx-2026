@@ -4,10 +4,12 @@ import { useState } from "react";
 import { AlertTriangle, Check, Copy, Flag, Loader2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import type { ChatMessage } from "@/lib/chat-types";
+import { ApprovalCard } from "@/components/chat/approval-card";
+import type { ApprovalDecision, ChatMessage } from "@/lib/chat-types";
 
 const TOOL_LABELS: Record<string, { running: string; done: string }> = {
   search_filings: { running: "Searching filings", done: "Searched filings" },
+  save_note: { running: "Saving note", done: "Saved note" },
 };
 
 function toolLabel(name: string, status: "running" | "done"): string {
@@ -28,10 +30,14 @@ export function UserBubble({ text }: { text: string }) {
 
 export function AssistantMessage({
   message,
+  agentName,
   onRetry,
+  onDecide,
 }: {
   message: Extract<ChatMessage, { role: "assistant" }>;
+  agentName: string;
   onRetry: () => void;
+  onDecide: (decision: ApprovalDecision) => void;
 }) {
   const [copied, setCopied] = useState(false);
   const displayText = message.text ?? message.preview;
@@ -116,7 +122,17 @@ export function AssistantMessage({
             </p>
           ) : null}
 
-          {!isLive ? (
+          {message.approval ? (
+            <ApprovalCard
+              approval={message.approval}
+              agentName={agentName}
+              onDecide={onDecide}
+            />
+          ) : null}
+
+          {/* A run that stopped for approval hasn't answered yet, so there is
+           * nothing to flag or copy; the continuation message has the row. */}
+          {!isLive && !message.approval ? (
             <div className="flex items-center gap-1 text-text-muted">
               <Button
                 type="button"
