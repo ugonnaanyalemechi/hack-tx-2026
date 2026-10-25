@@ -82,6 +82,8 @@ def agent_id(client, db_session, runtime_db) -> str:
         "connectors": [{"name": "fake-mcp"}],
         "budget": {"monthly_cap": 10.0},
         "evals": {"min_score": 0.8},
+        # These tests are not about the output guard (see test_flow_guard.py).
+        "guardrails": {"require_citation": False, "strip_secrets": False},
     }
     fake_mcp = connectors.seed_fake_mcp_connector(db_session)
     r = client.post("/v1/agents", json={"spec_yaml": yaml.safe_dump(spec)}, headers=BUILDER)
@@ -211,6 +213,7 @@ def test_the_run_and_its_steps_are_recorded(client, fake_model, agent_id) -> Non
         ("model", "gemini/gemini-3.8-flash"),
         ("tool", "lookup"),
         ("model", "gemini/gemini-3.8-flash"),
+        ("guard", "output_guard"),
     ]
     assert all(s["error"] is None for s in detail["steps"])
 
