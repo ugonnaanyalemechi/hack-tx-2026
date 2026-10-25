@@ -19,7 +19,7 @@ from hack_tx_2026.db.orm import Agent, AgentVersion, Connector, ConnectorGrant
 from hack_tx_2026.demo import filings
 from hack_tx_2026.errors import ApiError
 from hack_tx_2026.models.api import Page
-from hack_tx_2026.models.connector_api import ConnectorOut, ToolOut
+from hack_tx_2026.models.connector_api import ConnectorOut, GrantOut, ToolOut
 from hack_tx_2026.models.spec import AgentSpec
 
 # The MCP servers the layer can reach, by connector name. A granted
@@ -130,6 +130,23 @@ def list_connectors(session: Session, limit: int, cursor: str | None) -> Page[Co
     ]
     next_cursor = _b64(page[-1].name) if len(rows) > limit else None
     return Page[ConnectorOut](items=items, next_cursor=next_cursor)
+
+
+def list_active_grants(session: Session, limit: int, cursor: str | None) -> Page[GrantOut]:
+    """Grants not yet revoked, ordered by id, paged with an id cursor."""
+    stmt = (
+        select(ConnectorGrant)
+        .where(ConnectorGrant.revoked_at.is_(None))
+        .order_by(ConnectorGrant.id)
+        .limit(limit + 1)
+    )
+    if cursor:
+        stmt = stmt.where(ConnectorGrant.id > _unb64(cursor))
+    rows = list(session.scalars(stmt))
+    page = rows[:limit]
+    items = [GrantOut.model_validate(g, from_attributes=True) for g in page]
+    next_cursor = _b64(page[-1].id) if len(rows) > limit else None
+    return Page[GrantOut](items=items, next_cursor=next_cursor)
 
 
 def _active_grant(session: Session, connector_id: str, agent_id: str) -> ConnectorGrant | None:
