@@ -2,6 +2,8 @@
 
 import yaml
 
+from hack_tx_2026.demo.seed_data import load_spec_yaml
+
 BUILDER = {"X-User-Id": "usr_builder"}
 BUILDER_2 = {"X-User-Id": "usr_builder_2"}
 ADMIN = {"X-User-Id": "usr_admin"}
@@ -130,6 +132,94 @@ def test_validate_reports_several_errors_at_once() -> None:
     assert {"slug", "model", "instructions"} <= set(errors_by_field(r))
 
 
+def validate(**overrides):
+    return _post("/v1/agents/validate", {"spec_yaml": yaml_text(**overrides)}, BUILDER)
+
+
+def test_validate_rejects_misspelled_top_level_key() -> None:
+    r = validate(triger="daily")
+
+    assert r.json()["valid"] is False
+    assert "unknown field 'triger'" in errors_by_field(r)["triger"].lower()
+
+
+@pytest.mark.parametrize(
+    ("overrides", "field"),
+    [
+        ({"connectors": [{"name": "files", "alow_list": ["read"]}]}, "connectors.0.alow_list"),
+        ({"budget": {"monthly_cap": 25.0, "warn_fraction": 0.5}}, "budget.warn_fraction"),
+        ({"evals": {"min_score": 0.8, "minscore": 0.1}}, "evals.minscore"),
+        ({"guardrails": {"strip_secret": False}}, "guardrails.strip_secret"),
+    ],
+)
+def test_validate_rejects_unknown_nested_key(overrides: dict, field: str) -> None:
+    r = validate(**overrides)
+
+    assert r.json()["valid"] is False
+    assert field in errors_by_field(r)
+
+
+@pytest.mark.parametrize("cap", [0, -5])
+def test_validate_rejects_non_positive_monthly_cap(cap: float) -> None:
+    r = validate(budget={"monthly_cap": cap})
+
+    assert r.json()["valid"] is False
+    assert "budget.monthly_cap" in errors_by_field(r)
+
+
+@pytest.mark.parametrize("fraction", [0, -0.2, 1.01, 3])
+def test_validate_rejects_warning_fraction_outside_zero_to_one(fraction: float) -> None:
+    r = validate(budget={"monthly_cap": 25.0, "warning_fraction": fraction})
+
+    assert r.json()["valid"] is False
+    assert "budget.warning_fraction" in errors_by_field(r)
+
+
+def test_validate_accepts_warning_fraction_of_one() -> None:
+    r = validate(budget={"monthly_cap": 25.0, "warning_fraction": 1})
+
+    assert r.json() == {"valid": True, "errors": []}
+
+
+@pytest.mark.parametrize("score", [-0.1, 1.5, 7])
+def test_validate_rejects_min_score_outside_zero_to_one(score: float) -> None:
+    r = validate(evals={"min_score": score})
+
+    assert r.json()["valid"] is False
+    assert "evals.min_score" in errors_by_field(r)
+
+
+@pytest.mark.parametrize("score", [0, 1])
+def test_validate_accepts_min_score_at_bounds(score: float) -> None:
+    r = validate(evals={"min_score": score})
+
+    assert r.json() == {"valid": True, "errors": []}
+
+
+def test_validate_rejects_side_effect_tool_missing_from_allow_list() -> None:
+    connector = {"name": "files", "allow_list": ["read_file"], "side_effect_tools": ["delete_file"]}
+
+    r = validate(connectors=[connector])
+
+    assert r.json()["valid"] is False
+    assert "delete_file" in errors_by_field(r)["connectors.0.side_effect_tools"]
+
+
+@pytest.mark.parametrize(
+    "connector",
+    [
+        {"name": "files", "allow_list": ["read", "save"], "side_effect_tools": ["save"]},
+        {"name": "files", "side_effect_tools": ["save"]},
+    ],
+)
+def test_validate_accepts_side_effect_tools_within_allow_list_or_without_one(
+    connector: dict,
+) -> None:
+    r = validate(connectors=[connector])
+
+    assert r.json() == {"valid": True, "errors": []}
+
+
 # --- create / list / detail ------------------------------------------------
 
 
@@ -144,6 +234,7 @@ def test_create_makes_version_one_draft() -> None:
     assert body["live_version_number"] is None
     assert [(v["version_number"], v["status"]) for v in body["versions"]] == [(1, "draft")]
     assert body["versions"][0]["spec"]["slug"] == "tax-helper"
+    assert body["versions"][0]["spec"]["budget"]["monthly_cap"] == 25.0
     assert "cost" not in str(body).lower()
 
     listed = get("/v1/agents", END_USER).json()["items"]
@@ -183,6 +274,69 @@ def test_unknown_agent_is_404() -> None:
 
     assert r.status_code == 404
     assert r.json()["error"]["code"] == "agent_not_found"
+
+
+def _agent_with_two_versions() -> str:
+    agent_id = create().json()["id"]
+    _post(
+        f"/v1/agents/{agent_id}/versions",
+        {"spec_yaml": yaml_text(budget={"monthly_cap": 40.0})},
+        BUILDER,
+    )
+    return agent_id
+
+
+def test_detail_omits_budget_for_end_user_and_non_owner_builder() -> None:
+    agent_id = _agent_with_two_versions()
+
+    for headers in (END_USER, BUILDER_2):
+        r = get(f"/v1/agents/{agent_id}", headers)
+
+        assert r.status_code == 200
+        specs = [v["spec"] for v in r.json()["versions"]]
+        assert len(specs) == 2
+        assert all("budget" not in spec for spec in specs)
+
+
+def test_detail_shows_budget_to_owner_and_admin() -> None:
+    agent_id = _agent_with_two_versions()
+
+    for headers in (BUILDER, ADMIN):
+        r = get(f"/v1/agents/{agent_id}", headers)
+
+        assert r.status_code == 200
+        assert [v["spec"]["budget"] for v in r.json()["versions"]] == [
+            {"monthly_cap": 25.0, "warning_fraction": 0.8},
+            {"monthly_cap": 40.0, "warning_fraction": 0.8},
+        ]
+
+
+def test_detail_differs_only_by_budget_between_callers() -> None:
+    agent_id = _agent_with_two_versions()
+    full = get(f"/v1/agents/{agent_id}", BUILDER).json()
+    assert get(f"/v1/agents/{agent_id}", ADMIN).json() == full
+
+    expected = full
+    for version in expected["versions"]:
+        del version["spec"]["budget"]
+    for headers in (END_USER, BUILDER_2):
+        assert get(f"/v1/agents/{agent_id}", headers).json() == expected
+
+
+def test_write_endpoints_return_budget_to_their_caller() -> None:
+    agent_id = create().json()["id"]
+
+    added = _post(
+        f"/v1/agents/{agent_id}/versions",
+        {"spec_yaml": yaml_text(budget={"monthly_cap": 40.0})},
+        BUILDER,
+    )
+    deployed = _post(f"/v1/agents/{agent_id}/versions/2/deploy", {}, BUILDER)
+    copied = _post(f"/v1/agents/{agent_id}/copy", {"slug": "my-copy"}, BUILDER_2)
+
+    for r in (added, deployed):
+        assert [v["spec"]["budget"]["monthly_cap"] for v in r.json()["versions"]] == [25.0, 40.0]
+    assert copied.json()["versions"][0]["spec"]["budget"]["monthly_cap"] == 40.0
 
 
 # --- versions ---------------------------------------------------------------
@@ -228,6 +382,33 @@ def test_version_slug_must_match_agent() -> None:
     assert r.status_code == 422
     assert r.json()["error"]["code"] == "invalid_spec"
     assert "slug" in {e["field"] for e in r.json()["error"]["details"]["errors"]}
+
+
+def test_demo_spec_creates_and_adds_a_version() -> None:
+    demo_yaml = load_spec_yaml()
+
+    created = _post("/v1/agents", {"spec_yaml": demo_yaml}, BUILDER)
+    added = _post(f"/v1/agents/{created.json()['id']}/versions", {"spec_yaml": demo_yaml}, BUILDER)
+
+    assert created.status_code == 201
+    assert added.status_code == 201
+    assert [v["version_number"] for v in added.json()["versions"]] == [1, 2]
+
+
+def test_create_and_add_version_reject_unknown_and_out_of_range_fields() -> None:
+    agent_id = create().json()["id"]
+    bad = yaml_text(guardrail={"strip_secrets": False}, evals={"min_score": 7})
+
+    created = _post("/v1/agents", {"spec_yaml": bad.replace("tax-helper", "other")}, BUILDER)
+    added = _post(f"/v1/agents/{agent_id}/versions", {"spec_yaml": bad}, BUILDER)
+
+    for r in (created, added):
+        assert r.status_code == 422
+        assert r.json()["error"]["code"] == "invalid_spec"
+        fields = {e["field"] for e in r.json()["error"]["details"]["errors"]}
+        assert {"guardrail", "evals.min_score"} <= fields
+    assert [a["slug"] for a in get("/v1/agents").json()["items"]] == ["tax-helper"]
+    assert len(get(f"/v1/agents/{agent_id}").json()["versions"]) == 1
 
 
 def test_version_invalid_spec_and_unknown_agent() -> None:
