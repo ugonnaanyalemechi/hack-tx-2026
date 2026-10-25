@@ -209,6 +209,27 @@ def _run_tool(ctx: RunContext, name: str, arguments: dict[str, Any]) -> dict[str
     return output
 
 
+def _parse_arguments(raw: str | None) -> dict[str, Any] | None:
+    """A tool call's arguments as a dict, or None if they are not a JSON object."""
+    try:
+        parsed = json.loads(raw or "{}")
+    except ValueError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _record_bad_arguments(ctx: RunContext, name: str) -> dict[str, Any]:
+    """Records a tool step for a call whose arguments could not be read and
+    returns the error result the model is shown."""
+    error = "The arguments were not a valid JSON object. Call the tool again with a JSON object."
+    with SessionLocal() as session:
+        recorder.record_step(
+            session, ctx.run_id, kind="tool", name=name, input={}, output=None, error=error
+        )
+        session.commit()
+    return {"error": error}
+
+
 def _request_approval(ctx: RunContext, name: str, arguments: dict[str, Any]) -> str:
     """Records a pending approval and its approval step; returns the approval's id."""
     with SessionLocal() as session:
@@ -242,7 +263,17 @@ def _tools_node(state: ChatState, runtime: Runtime[RunContext]) -> ChatState:
         if call["id"] in answered:
             continue
         name = call["function"]["name"]
-        arguments = json.loads(call["function"].get("arguments") or "{}")
+        arguments = _parse_arguments(call["function"].get("arguments"))
+        if arguments is None:
+            # The model sent arguments that are not a JSON object: tell it so
+            # and let it try again, instead of failing the run.
+            write(ToolCallEvent(name=name, input={}))
+            output = _record_bad_arguments(runtime.context, name)
+            write(ToolResultEvent(name=name, output=output))
+            results.append(
+                {"role": "tool", "tool_call_id": call["id"], "content": json.dumps(output)}
+            )
+            continue
         if name in side_effect:
             update: ChatState = {}
             text = turn[index].get("content") or ""

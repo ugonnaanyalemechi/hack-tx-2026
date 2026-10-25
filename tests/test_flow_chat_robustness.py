@@ -20,7 +20,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 
 from hack_tx_2026 import agent_runtime, checkpointer, connectors, gateway, seams
-from hack_tx_2026.fake_model import ScriptedModel, reply
+from hack_tx_2026.fake_model import ScriptedModel, reply, tool_call
 
 ADMIN = {"X-User-Id": "usr_admin"}
 BUILDER = {"X-User-Id": "usr_builder"}
@@ -193,6 +193,28 @@ def test_a_client_that_disconnects_mid_stream_leaves_no_running_run(
         gate.release.set()
         server.should_exit = True
         runner.join(timeout=10)
+
+
+# --- Bad tool arguments ---
+
+
+@pytest.mark.parametrize("arguments", ["{not json", "[1, 2]", '"text"'])
+def test_bad_tool_arguments_become_an_error_result_and_the_run_continues(
+    client, fake_model, agent_id, arguments
+) -> None:
+    bad = reply(tool_calls=[tool_call("lookup", {"query": "revenue"}, id="call_bad")])
+    bad.message["tool_calls"][0]["function"]["arguments"] = arguments  # type: ignore[typeddict-item]
+    fake_model.script(bad, reply("Sorry, I could not look that up."))
+    thread = new_thread(client, agent_id)
+
+    events = send(client, thread["id"], "What was revenue?")
+
+    assert events[-1] == {"type": "run_finished", "status": "completed"}
+    assert events[-2] == {"type": "message_complete", "text": "Sorry, I could not look that up."}
+    tool_message = fake_model.requests[-1].messages[-1]
+    assert tool_message["role"] == "tool"
+    assert tool_message["tool_call_id"] == "call_bad"
+    assert "error" in json.loads(tool_message["content"])
 
 
 # --- Unexpected failures ---
