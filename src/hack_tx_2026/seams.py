@@ -10,7 +10,6 @@ callers should only rely on the signatures below.
 from typing import Any, Protocol
 
 from hack_tx_2026.models.records import EntryPoint
-from hack_tx_2026.registry import get_version
 
 
 class Tool(Protocol):
@@ -61,20 +60,7 @@ def create_ticket(run_id: str, question: str, answer: str, created_by: str) -> s
 def read_agent_version(agent_id: str, version_number: int | None = None) -> dict[str, Any]:
     """Owned by platform (registry). Returns the live version when
     version_number is omitted."""
-    from hack_tx_2026.db.base import SessionLocal
-
-    session = SessionLocal()
-    try:
-        version = get_version(session, agent_id, version_number)
-        return {
-            "id": version.id,
-            "agent_id": version.agent_id,
-            "version_number": version.version_number,
-            "spec": version.spec,
-            "status": version.status,
-        }
-    finally:
-        session.close()
+    raise NotImplementedError("owner:platform — registry, ticket #13")
 
 
 def run_agent(agent_version_id: str, entry_point: EntryPoint, run_input: RunInput) -> RunResult:
