@@ -8,6 +8,7 @@ tool runs on the fake MCP server through the connector layer.
 
 import json
 import threading
+import time
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 
@@ -17,6 +18,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 
 from hack_tx_2026 import agent_runtime, checkpointer, connectors, gateway, seams
+from hack_tx_2026 import app as app_module
 from hack_tx_2026.fake_model import ScriptedModel, reply, tool_call
 
 ADMIN = {"X-User-Id": "usr_admin"}
@@ -433,6 +435,7 @@ def test_an_unknown_thread_is_404(client, runtime_db) -> None:
         assert r.json()["error"]["code"] == "thread_not_found"
 
 
+@pytest.mark.filterwarnings("error::sqlalchemy.exc.SAWarning")
 def test_an_agent_with_no_live_version_cannot_be_chatted_with(
     client, fake_model, runtime_db
 ) -> None:
@@ -455,3 +458,55 @@ def test_an_agent_with_no_live_version_cannot_be_chatted_with(
     assert post.status_code == 409
     assert post.json()["error"]["code"] == "no_live_version"
     assert fake_model.requests == []
+
+
+# --- Thread memory lifecycle ---
+
+
+@pytest.fixture
+def counting_open(test_engine, monkeypatch) -> Iterator[list[checkpointer.PooledSaver]]:
+    """Replaces the saver factory with one that opens over the test DB (slowly, so
+    racing callers overlap) and records every saver it opens. Closes them afterwards."""
+    opened: list[checkpointer.PooledSaver] = []
+    real_open = checkpointer.open_checkpointer
+
+    def slow_open(database_url, max_size: int = 10) -> checkpointer.PooledSaver:
+        time.sleep(0.2)
+        saver = real_open(test_engine.url, max_size)
+        opened.append(saver)
+        return saver
+
+    monkeypatch.setattr(checkpointer, "open_checkpointer", slow_open)
+    yield opened
+    checkpointer.set_checkpointer(None)
+    for saver in opened:
+        saver.close()
+
+
+def test_first_requests_arriving_together_set_up_thread_memory_once(
+    client, fake_model, agent_id, counting_open
+) -> None:
+    checkpointer.set_checkpointer(None)  # as if no request had needed memory yet
+    threads = [new_thread(client, agent_id)["id"] for _ in range(4)]
+    for _ in threads:
+        fake_model.script(reply("Hi"))
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(lambda tid: send(client, tid, "Hello"), threads))
+
+    assert all(events[-1]["status"] == "completed" for events in results)
+    assert len(counting_open) == 1
+
+
+def test_starting_and_stopping_the_app_opens_and_closes_thread_memory(
+    client, runtime_db, counting_open, test_engine, monkeypatch
+) -> None:
+    checkpointer.set_checkpointer(None)
+    factory = sessionmaker(bind=test_engine, autoflush=False, autocommit=False)
+    monkeypatch.setattr(app_module, "SessionLocal", factory)
+
+    with client:
+        assert len(counting_open) == 1
+        assert not counting_open[0]._pool.closed
+
+    assert counting_open[0]._pool.closed
