@@ -65,6 +65,9 @@ export default function ChatPage() {
 
 function ChatPageInner() {
   const searchParams = useSearchParams();
+  // Mock-only test hooks, read from the URL: ?empty, ?chatsError, ?fastStream,
+  // ?decideError, ?flagError and ?budget force states or speed up the fake
+  // stream for Playwright and screenshots. They have no effect on a live backend.
   const forceEmpty = searchParams.get("empty") === "1";
   const forceChatsError = searchParams.get("chatsError") === "1";
   // Tests run the mock stream at a much higher speed so the suite stays

@@ -87,7 +87,7 @@ export function AgentHeader({
 
         <div className="flex items-center gap-3">
           <Link
-            href="/chat"
+            href={`/chat?agent=${encodeURIComponent(agent.id)}`}
             className={cn(
               buttonVariants({ variant: "outline" }),
               "h-10 border-white/16 bg-transparent px-4.5 text-sm text-text-primary hover:border-white/24 hover:bg-white/6"

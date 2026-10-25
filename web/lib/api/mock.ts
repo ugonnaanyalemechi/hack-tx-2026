@@ -188,7 +188,9 @@ export function createMockClient(options: MockClientOptions): ApiClient {
 
   function toListItem(ticket: TicketDetail): TicketListItem {
     const { answer, note, created_by_name, ...item } = ticket;
-    void answer, note, created_by_name;
+    void answer;
+    void note;
+    void created_by_name;
     return item;
   }
 
