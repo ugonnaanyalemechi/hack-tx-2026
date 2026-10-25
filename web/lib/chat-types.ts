@@ -20,6 +20,25 @@ export interface ToolNote {
   status: "running" | "done";
 }
 
+/** The user's answer to an approval card. */
+export type ApprovalDecision = "approve" | "reject";
+
+/** A side-effect tool call waiting on (or past) the user's decision. Built
+ * from the approval_required stream event. */
+export interface ApprovalRequest {
+  /** approval_id from the stream; the decide call is keyed on it. */
+  id: string;
+  toolName: string;
+  toolInput: Record<string, unknown>;
+  /** "deciding" while the decide call is in flight, before its stream
+   * starts; "approved"/"rejected" once the backend accepted the decision. */
+  status: "pending" | "deciding" | "approved" | "rejected";
+  /** The button pressed, so the card can show which one is in flight. */
+  decision?: ApprovalDecision;
+  /** Set when the decide call failed before its stream started. */
+  error?: string;
+}
+
 export type ChatMessage =
   | {
       id: string;
@@ -37,6 +56,8 @@ export type ChatMessage =
       toolNote?: ToolNote;
       citations?: string[];
       guardNote?: string;
+      /** Set when this run stopped at a side-effect tool for approval. */
+      approval?: ApprovalRequest;
       /** Set when the run ended in error instead of a completed message. */
       error?: { code: string; message: string };
       status: "streaming" | "done" | "error";

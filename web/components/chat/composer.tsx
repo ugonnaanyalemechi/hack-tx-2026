@@ -8,10 +8,17 @@ import { Input } from "@/components/ui/input";
 interface ComposerProps {
   agentName: string;
   disabled: boolean;
+  /** Replaces the "Ask <agent>" hint, e.g. to say why the input is locked. */
+  placeholder?: string;
   onSend: (text: string) => void;
 }
 
-export function Composer({ agentName, disabled, onSend }: ComposerProps) {
+export function Composer({
+  agentName,
+  disabled,
+  placeholder,
+  onSend,
+}: ComposerProps) {
   const [value, setValue] = useState("");
 
   function handleSubmit(e: FormEvent) {
@@ -30,7 +37,7 @@ export function Composer({ agentName, disabled, onSend }: ComposerProps) {
       <Input
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        placeholder={`Ask ${agentName}`}
+        placeholder={placeholder ?? `Ask ${agentName}`}
         disabled={disabled}
         aria-label={`Ask ${agentName}`}
         className="h-11 flex-1 rounded-pill border-border-default bg-white/4 px-4 text-sm"
