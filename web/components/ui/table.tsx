@@ -3,7 +3,7 @@
 import * as React from "react"
 import { cn } from "cn"
 
-// Themed for Nocturne tables: subtle hairline rows, small brand-tinted
+// Themed for Foundry tables: subtle hairline rows, small brand-tinted
 // header labels, and a cobalt tint for the selected row.
 
 function Table({ className, ...props }: React.ComponentProps<"table">) {
@@ -72,7 +72,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
     <th
       data-slot="table-head"
       className={cn(
-        "h-10 px-3 text-left align-middle text-xs font-medium whitespace-nowrap text-text-brand [&:has([role=checkbox])]:pr-0",
+        "h-10 px-3 text-left align-middle font-mono text-overline font-medium tracking-overline uppercase whitespace-nowrap text-text-brand [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}

@@ -18,7 +18,7 @@ const badgeVariants = cva(
         ghost:
           "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
         link: "text-primary underline-offset-4 hover:underline",
-        // Nocturne status badges (docs/design-system.md §6, Badges): the
+        // Foundry status badges (docs/design-system.md §6, Badges): the
         // color at 12% fill, 28% border, full strength for the text.
         neutral: "h-6 rounded-pill border-white/12 bg-white/8 px-2.5 text-neutral-200",
         brand:

@@ -61,13 +61,13 @@ export function ApprovalCard({
     <section
       aria-labelledby={titleId}
       aria-busy={deciding || undefined}
-      className="mt-2 flex w-full max-w-2xl flex-col gap-5 rounded-xl border border-border-default bg-white/4 p-6 shadow-e2"
+      className="mt-2 flex w-full max-w-2xl flex-col gap-5 rounded-xl border border-border-default bg-surface-1 bg-plate p-6 shadow-e2"
     >
       <div className="flex items-center justify-between gap-3">
         <span
           className={cn(
             "font-mono text-overline font-medium tracking-overline uppercase",
-            decided ? "text-text-muted" : "text-warning"
+            decided ? "text-text-muted" : "text-text-brand"
           )}
         >
           {decided ? "Approval" : "Approval needed"}
@@ -141,7 +141,7 @@ export function ApprovalCard({
                 type="button"
                 disabled={deciding}
                 onClick={() => onDecide("approve")}
-                className="h-10 gap-2 rounded-pill bg-primary-500 px-4.5 text-sm font-medium text-neutral-50 hover:bg-primary-600"
+                className="h-10 gap-2 rounded-pill bg-molten px-4.5 text-sm font-medium text-text-inverse hover:brightness-110"
               >
                 {deciding && approval.decision === "approve" ? (
                   <InFlight label="Approving…" />

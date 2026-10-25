@@ -44,7 +44,7 @@ export function ChatSidebar({
       <Button
         type="button"
         onClick={onNewChat}
-        className="h-10 w-full justify-center gap-1.5 rounded-pill bg-neutral-50 text-sm font-medium text-text-inverse hover:bg-white"
+        className="h-10 w-full justify-center gap-1.5 rounded-pill bg-steel text-sm font-medium text-text-inverse hover:brightness-110"
       >
         <Plus className="size-4" aria-hidden />
         New chat

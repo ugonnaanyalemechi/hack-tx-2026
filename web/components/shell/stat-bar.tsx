@@ -1,5 +1,5 @@
 /**
- * The Nocturne stat bar (docs/design-system.md §6, Cards): equal cells,
+ * The Foundry stat bar (docs/design-system.md §6, Cards): equal cells,
  * each a large tabular figure with a caption under it (P7), hairlines
  * between cells.
  */
@@ -13,7 +13,7 @@ export interface Stat {
 
 export function StatBar({ stats }: { stats: Stat[] }) {
   return (
-    <dl className="grid grid-cols-2 overflow-hidden rounded-xl border border-border-default bg-white/3 lg:grid-cols-4">
+    <dl className="grid grid-cols-2 overflow-hidden rounded-xl border border-border-default bg-surface-1 bg-plate shadow-e1 lg:grid-cols-4">
       {stats.map((stat, i) => (
         <div
           key={stat.label}
@@ -21,8 +21,8 @@ export function StatBar({ stats }: { stats: Stat[] }) {
             i > 0 ? "border-l" : ""
           } ${i >= 2 ? "max-lg:border-t" : ""} ${i === 2 ? "max-lg:border-l-0" : ""}`}
         >
-          <dt className="text-xs text-text-muted">{stat.label}</dt>
-          <dd data-testid={stat.testId} className="text-stat text-text-primary tabular-nums">
+          <dt className="font-mono text-overline tracking-overline text-text-muted uppercase">{stat.label}</dt>
+          <dd data-testid={stat.testId} className="font-mono text-stat text-text-primary tabular-nums">
             {stat.value}
           </dd>
         </div>
