@@ -2,7 +2,7 @@ import { cn } from "cn";
 import { Badge } from "@/components/ui/badge";
 
 /**
- * Nocturne status badge (docs/design-system.md §6, Badges): 24px pill with a
+ * Foundry status badge (docs/design-system.md §6, Badges): 24px pill with a
  * 6px dot, the tone's color as text, at 12% as fill and 28% as border.
  * Badges report status and are not buttons.
  */
