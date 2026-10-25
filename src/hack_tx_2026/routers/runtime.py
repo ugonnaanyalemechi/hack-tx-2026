@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from hack_tx_2026 import agent_runtime, chat, invoke
 from hack_tx_2026.db.base import get_session
-from hack_tx_2026.db.orm import Approval, Thread
+from hack_tx_2026.db.orm import Approval, Run, Thread
 from hack_tx_2026.identity import CurrentUser, get_current_user
 from hack_tx_2026.models.api import Page
 from hack_tx_2026.models.chat_api import (
@@ -45,12 +45,24 @@ OwnedThreadDep = Annotated[Thread, Depends(get_owned_thread)]
 
 
 def get_open_thread(thread: OwnedThreadDep, session: SessionDep) -> Thread:
-    """The caller's thread, if no run on it is waiting on an approval."""
+    """The caller's thread, if it may take a new message: 409 approval_pending
+    while a run on it waits on an approval, 409 budget_paused while it or its
+    agent is paused at the budget."""
     chat.ensure_no_pending_approval(session, thread)
+    chat.ensure_not_budget_paused(session, thread)
     return thread
 
 
 OpenThreadDep = Annotated[Thread, Depends(get_open_thread)]
+
+
+def get_resumed_run(thread: OwnedThreadDep, session: SessionDep) -> tuple[Run, dict[str, Any]]:
+    """The thread's paused run, marked running again, with its version's spec:
+    409 approval_pending, nothing_to_resume or budget_paused otherwise."""
+    return chat.start_resume(session, thread)
+
+
+ResumedRunDep = Annotated[tuple[Run, dict[str, Any]], Depends(get_resumed_run)]
 
 
 def get_decidable_approval(approval_id: str, session: SessionDep, user: UserDep) -> Approval:
@@ -105,6 +117,21 @@ def send_message(
         agent_version_id=version["agent_version_id"],
         spec=version["spec"],
         text=body.text,
+    )
+    return StreamingResponse(
+        _sse(events),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/threads/{thread_id}/resume")
+def resume_thread(thread: OwnedThreadDep, resumed: ResumedRunDep) -> StreamingResponse:
+    """Continue: resumes the thread's paused run from its checkpoint and
+    streams its events (models/events.py) as server-sent events."""
+    run, spec = resumed
+    events = agent_runtime.resume_chat(
+        run_id=run.id, thread_id=thread.id, agent_version_id=run.agent_version_id, spec=spec
     )
     return StreamingResponse(
         _sse(events),

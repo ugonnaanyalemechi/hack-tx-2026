@@ -146,6 +146,62 @@ def ensure_no_pending_approval(session: Session, thread: Thread) -> None:
         raise ApiError(409, "approval_pending", "Approve or reject the pending action first")
 
 
+# --- Budget pause and resume (tickets #22, #62) ---
+
+
+def _paused_run(session: Session, thread: Thread, *, lock: bool = False) -> Run | None:
+    """The thread's run stopped at a budget pause, waiting for Continue. With
+    `lock`, the row stays locked until commit, so two Continues can't both win."""
+    stmt = (
+        select(Run)
+        .where(Run.thread_id == thread.id, Run.status == "paused")
+        .order_by(Run.created_at.desc())
+        .limit(1)
+    )
+    return session.scalar(stmt.with_for_update() if lock else stmt)
+
+
+def _agent_budget_paused(agent_id: str) -> bool:
+    try:
+        return seams.check_agent_budget(agent_id).state == "paused"
+    except LookupError:  # no versions yet: start_chat_run reports that
+        return False
+
+
+def _budget_paused_error() -> ApiError:
+    return ApiError(
+        409, "budget_paused", "This agent is paused at its budget cap, waiting for an admin"
+    )
+
+
+def ensure_not_budget_paused(session: Session, thread: Thread) -> None:
+    """409 budget_paused while the agent's budget is paused, or while the
+    thread has a run stopped at a budget pause that has not been continued."""
+    if _paused_run(session, thread) is not None or _agent_budget_paused(thread.agent_id):
+        raise _budget_paused_error()
+
+
+def start_resume(session: Session, thread: Thread) -> tuple[Run, dict[str, Any]]:
+    """Checks the thread's paused run may continue, marks it running again
+    and commits. 409 approval_pending while an approval is pending, 409
+    nothing_to_resume if no run is paused, 409 budget_paused until an admin
+    approves more spend. Returns the run and its version's spec."""
+    ensure_no_pending_approval(session, thread)
+    run = _paused_run(session, thread, lock=True)
+    if run is None:
+        raise ApiError(409, "nothing_to_resume", "This chat has no paused run to continue")
+    if _agent_budget_paused(thread.agent_id):
+        raise _budget_paused_error()
+    version = session.get(AgentVersion, run.agent_version_id)
+    assert version is not None
+    spec = dict(version.spec)
+    run.status = "running"
+    run.finished_at = None
+    thread.last_updated_at = dt.datetime.now(dt.UTC)
+    session.commit()
+    return run, spec
+
+
 def decidable_approval(session: Session, user: CurrentUser, approval_id: str) -> Approval:
     """The pending approval, locked until the decision commits: 404 if unknown,
     403 unless the caller is the run's user, 409 if already decided."""
