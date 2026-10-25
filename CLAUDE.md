@@ -22,6 +22,7 @@ If these docs disagree with a ticket, stop and flag it on the ticket instead of 
 - Start the database: `docker compose up -d`
 - Apply migrations: `uv run alembic upgrade head`
 - New migration: `uv run alembic revision --autogenerate -m "<message>"`
+- Seed admin/builder/end-user accounts (`usr_admin`, `usr_builder`, `usr_enduser`) for the identity header: `uv run seed`
 - Backend tests: `uv run pytest`
 - The check command (lint, types, tests — run this before every commit): `uv run check`
 - Add a backend dependency: `uv add <package>` (dev tools: `uv add --dev <package>`)

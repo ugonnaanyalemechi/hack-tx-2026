@@ -2,11 +2,14 @@ from collections.abc import Generator
 
 import pytest
 import sqlalchemy
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
+from hack_tx_2026.app import create_app
 from hack_tx_2026.db import orm  # noqa: F401 — registers tables on Base.metadata
-from hack_tx_2026.db.base import Base
+from hack_tx_2026.db.base import Base, get_session
+from hack_tx_2026.seed import seed_users
 from hack_tx_2026.settings import get_settings
 
 
@@ -47,3 +50,16 @@ def db_session(test_engine) -> Generator[Session]:
         yield session
     finally:
         session.close()
+
+
+@pytest.fixture
+def client(db_session: Session) -> Generator[TestClient]:
+    """An HTTP client wired to the reset test database, with seeded users."""
+    seed_users(db_session)
+
+    app = create_app()
+    app.dependency_overrides[get_session] = lambda: db_session
+    try:
+        yield TestClient(app)
+    finally:
+        app.dependency_overrides.clear()
