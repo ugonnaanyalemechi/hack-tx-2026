@@ -6,6 +6,7 @@ to it. Functions flush or commit as noted; the stream itself is
 """
 
 import datetime as dt
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import and_, or_, select
@@ -13,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from hack_tx_2026 import agent_runtime, seams
 from hack_tx_2026.admin_reads import _b64, _unb64, _utc
-from hack_tx_2026.db.orm import Agent, AgentVersion, Approval, Run, Thread
+from hack_tx_2026.db.orm import Agent, AgentVersion, Approval, Run, Thread, Ticket
 from hack_tx_2026.errors import ApiError
 from hack_tx_2026.identity import CurrentUser
 from hack_tx_2026.models.api import Page
@@ -99,6 +100,7 @@ def read_messages(thread: Thread) -> list[MessageOut]:
             role=entry["role"],  # type: ignore[arg-type]
             text=entry["text"],
             created_at=dt.datetime.fromisoformat(entry["created_at"]),
+            run_id=entry.get("run_id") if entry["role"] == "assistant" else None,
         )
         for entry in agent_runtime.read_transcript(thread.id)
     ]
@@ -129,14 +131,22 @@ def start_chat_run(
     return run, version
 
 
-def _pending_approval(session: Session, thread: Thread) -> bool:
-    stmt = (
+# --- Approvals (ticket #24) ---
+
+
+def ensure_no_pending_approval(session: Session, thread: Thread) -> None:
+    """409 approval_pending while a run on the thread waits on a decision."""
+    pending = session.scalar(
         select(Approval.id)
         .join(Run, Run.id == Approval.run_id)
         .where(Run.thread_id == thread.id, Approval.status == "pending")
         .limit(1)
     )
-    return session.scalar(stmt) is not None
+    if pending is not None:
+        raise ApiError(409, "approval_pending", "Approve or reject the pending action first")
+
+
+# --- Budget pause and resume (tickets #22, #62) ---
 
 
 def _paused_run(session: Session, thread: Thread, *, lock: bool = False) -> Run | None:
@@ -158,43 +168,127 @@ def _agent_budget_paused(agent_id: str) -> bool:
         return False
 
 
-def _approval_pending_error() -> ApiError:
-    return ApiError(409, "approval_pending", "This chat is waiting for an approval decision")
-
-
 def _budget_paused_error() -> ApiError:
     return ApiError(
         409, "budget_paused", "This agent is paused at its budget cap, waiting for an admin"
     )
 
 
-def check_can_send(session: Session, thread: Thread) -> None:
-    """A new message needs a chat that is not stopped: 409 approval_pending
-    while an approval is pending, 409 budget_paused while the chat has a run
-    paused at the budget (until Continue) or the agent's budget is paused."""
-    if _pending_approval(session, thread):
-        raise _approval_pending_error()
+def ensure_not_budget_paused(session: Session, thread: Thread) -> None:
+    """409 budget_paused while the agent's budget is paused, or while the
+    thread has a run stopped at a budget pause that has not been continued."""
     if _paused_run(session, thread) is not None or _agent_budget_paused(thread.agent_id):
         raise _budget_paused_error()
 
 
 def start_resume(session: Session, thread: Thread) -> tuple[Run, dict[str, Any]]:
-    """Checks the thread's stopped run may continue and marks it running again.
-    409 approval_pending while an approval is pending, 409 nothing_to_resume
-    if no run is paused, 409 budget_paused until an admin approves more spend.
-    Returns the run and its version's spec."""
-    if _pending_approval(session, thread):
-        raise _approval_pending_error()
+    """Checks the thread's paused run may continue, marks it running again
+    and commits. 409 approval_pending while an approval is pending, 409
+    nothing_to_resume if no run is paused, 409 budget_paused until an admin
+    approves more spend. Returns the run and its version's spec."""
+    ensure_no_pending_approval(session, thread)
     run = _paused_run(session, thread, lock=True)
     if run is None:
         raise ApiError(409, "nothing_to_resume", "This chat has no paused run to continue")
     if _agent_budget_paused(thread.agent_id):
         raise _budget_paused_error()
     version = session.get(AgentVersion, run.agent_version_id)
-    if version is None:  # runs keep their version; guard for type narrowing
-        raise ApiError(500, "version_missing", "The paused run's version is missing")
+    assert version is not None
+    spec = dict(version.spec)
     run.status = "running"
     run.finished_at = None
     thread.last_updated_at = dt.datetime.now(dt.UTC)
     session.commit()
-    return run, version.spec
+    return run, spec
+
+
+def decidable_approval(session: Session, user: CurrentUser, approval_id: str) -> Approval:
+    """The pending approval, locked until the decision commits: 404 if unknown,
+    403 unless the caller is the run's user, 409 if already decided."""
+    approval = session.scalar(select(Approval).where(Approval.id == approval_id).with_for_update())
+    if approval is None:
+        raise ApiError(404, "approval_not_found", "Approval not found")
+    run = session.get(Run, approval.run_id)
+    if run is None or run.user_id != user.id:
+        raise ApiError(403, "forbidden", "Only the person running this chat can decide")
+    if approval.status != "pending":
+        raise ApiError(409, "approval_already_decided", "This action was already decided")
+    return approval
+
+
+def decide_approval(
+    session: Session, user: CurrentUser, approval: Approval, decision: str
+) -> tuple[Run, dict[str, Any]]:
+    """Records who decided and when, marks the run running again, and commits.
+    Returns the run and the spec of the version it runs."""
+    run = session.get(Run, approval.run_id)
+    assert run is not None
+    approval.status = "approved" if decision == "approve" else "rejected"
+    approval.decided_by = user.id
+    approval.decided_at = dt.datetime.now(dt.UTC)
+    run.status = "running"
+    run.finished_at = None
+    version = session.get(AgentVersion, run.agent_version_id)
+    assert version is not None
+    spec = dict(version.spec)
+    session.commit()
+    return run, spec
+
+
+@dataclass(frozen=True)
+class FlagTarget:
+    """A run whose answer can be flagged, with the question it answered."""
+
+    run: Run
+    question: str
+    answer: str
+
+
+def flaggable_run(session: Session, user: CurrentUser, run_id: str) -> FlagTarget:
+    """The run to flag, checked before the re-check stream opens: 404 if
+    unknown, 403 if it is someone else's, 409 `already_flagged` if a ticket
+    exists for it, 409 `no_answer` if it never produced a final answer."""
+    run = session.get(Run, run_id)
+    if run is None:
+        raise ApiError(404, "run_not_found", "Run not found")
+    if run.user_id != user.id:
+        raise ApiError(403, "forbidden", "Only the person who got this answer can flag it")
+    if session.scalar(select(Ticket.id).where(Ticket.run_id == run.id)) is not None:
+        raise ApiError(409, "already_flagged", "This answer has already been flagged")
+    # A chat run's memory is its thread's; a re-check run's is its own.
+    entries = agent_runtime.read_transcript(run.thread_id or run.id)
+    question = next(
+        (e["text"] for e in entries if e["role"] == "user" and e.get("run_id") == run.id), None
+    )
+    answer = next(
+        (e["text"] for e in entries if e["role"] == "assistant" and e.get("run_id") == run.id),
+        None,
+    )
+    if question is None or answer is None:
+        raise ApiError(409, "no_answer", "This run has no answer to flag")
+    return FlagTarget(run=run, question=question, answer=answer)
+
+
+def start_recheck_run(
+    session: Session, user: CurrentUser, target: FlagTarget
+) -> tuple[Run, dict[str, Any]]:
+    """Files the ticket for a flagged answer, then creates the re-check run
+    on the same agent version (no thread: it runs on fresh memory) and
+    attaches it to the ticket. Commits. Returns the run and its version (as
+    `seams.read_agent_version` returns it)."""
+    flagged = target.run
+    version_row = session.get(AgentVersion, flagged.agent_version_id)
+    if version_row is None:  # pragma: no cover — FK guarantees this
+        raise ApiError(404, "run_not_found", "Run not found")
+    version = seams.read_agent_version(flagged.agent_id, version_row.version_number)
+    ticket_id = seams.create_ticket(flagged.id, target.question, target.answer, user.id)
+    run = Run(
+        agent_id=flagged.agent_id,
+        agent_version_id=flagged.agent_version_id,
+        user_id=user.id,
+        entry_point="recheck",
+    )
+    session.add(run)
+    session.commit()
+    seams.attach_recheck_run(ticket_id, run.id)
+    return run, version

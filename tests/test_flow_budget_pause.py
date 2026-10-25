@@ -19,7 +19,6 @@ from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 
 from hack_tx_2026 import agent_runtime, checkpointer, connectors, gateway, seams
-from hack_tx_2026.db.orm import Approval
 from hack_tx_2026.fake_model import ScriptedModel, reply, tool_call
 
 ADMIN = {"X-User-Id": "usr_admin"}
@@ -85,6 +84,7 @@ def agent_id(client, db_session, runtime_db) -> str:
         "connectors": [{"name": "fake-mcp"}],
         "budget": {"monthly_cap": 10.0},
         "evals": {"min_score": 0.8},
+        "guardrails": {"require_citation": False, "strip_secrets": False},
     }
     fake_mcp = connectors.seed_fake_mcp_connector(db_session)
     r = client.post("/v1/agents", json={"spec_yaml": yaml.safe_dump(spec)}, headers=BUILDER)
@@ -263,7 +263,7 @@ def test_after_approval_continue_resumes_the_run_from_its_checkpoint(
     assert continued[-1]["tool_call_id"] == "call_1"
     detail = run_detail(client, run_id)
     assert detail["run"]["status"] == "completed"
-    assert [s["kind"] for s in detail["steps"]] == ["model", "tool", "model"]
+    assert [s["kind"] for s in detail["steps"]] == ["model", "tool", "model", "guard"]
     messages = client.get(f"/v1/threads/{thread['id']}/messages", headers=END_USER).json()
     assert [(m["role"], m["text"]) for m in messages] == [
         ("user", "What was revenue?"),
@@ -313,14 +313,12 @@ def test_continue_on_someone_elses_chat_is_403(client, fake_model, agent_id) -> 
 
 
 def test_a_pending_approval_makes_new_messages_and_continue_409_approval_pending(
-    client, db_session, fake_model, agent_id
+    client, fake_model, agent_id
 ) -> None:
-    fake_model.script(reply("Hi"))
+    fake_model.script(reply(tool_calls=[tool_call("note", {"text": "remember this"})]))
     thread = new_thread(client, agent_id)
-    run_id = send(client, thread["id"], "Hello")[0]["run_id"]
-    # No endpoint creates approvals yet (#24), so this one is inserted directly.
-    db_session.add(Approval(run_id=run_id, tool_name="note", tool_input={"text": "x"}))
-    db_session.commit()
+    asked = send(client, thread["id"], "Record a note")
+    assert asked[-1] == {"type": "run_finished", "status": "awaiting_approval"}
 
     blocked = [
         client.post(f"/v1/threads/{thread['id']}/resume", headers=END_USER),
