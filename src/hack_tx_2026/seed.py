@@ -98,7 +98,7 @@ def main(argv: list[str] | None = None) -> None:
 
     with SessionLocal() as session:
         agent_id = seed_demo(session)
-        detail = registry.get_agent_detail(session, agent_id)
+        detail = registry.get_agent_detail(session, DEMO_OWNER, agent_id)
         versions = ", ".join(f"v{v.version_number} {v.status}" for v in detail.versions)
         cases = session.scalar(
             select(func.count()).select_from(EvalCase).where(EvalCase.agent_id == agent_id)

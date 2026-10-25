@@ -335,6 +335,7 @@ def test_admin_override_deploys_blocked_version(client, monkeypatch):
     assert r.status_code == 200
     assert r.json()["live_version_number"] == 1
     assert r.json()["versions"][0]["status"] == "deployed"
+    assert r.json()["versions"][0]["spec"]["budget"]["monthly_cap"] == 10.0
     assert r.json()["eval_report"]["override_reason"] == "Accepted risk"
     rep = report(client, agent_id, ADMIN).json()
     assert rep["override_reason"] == "Accepted risk"

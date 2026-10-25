@@ -144,6 +144,7 @@ def test_create_makes_version_one_draft() -> None:
     assert body["live_version_number"] is None
     assert [(v["version_number"], v["status"]) for v in body["versions"]] == [(1, "draft")]
     assert body["versions"][0]["spec"]["slug"] == "tax-helper"
+    assert body["versions"][0]["spec"]["budget"]["monthly_cap"] == 25.0
     assert "cost" not in str(body).lower()
 
     listed = get("/v1/agents", END_USER).json()["items"]
@@ -183,6 +184,69 @@ def test_unknown_agent_is_404() -> None:
 
     assert r.status_code == 404
     assert r.json()["error"]["code"] == "agent_not_found"
+
+
+def _agent_with_two_versions() -> str:
+    agent_id = create().json()["id"]
+    _post(
+        f"/v1/agents/{agent_id}/versions",
+        {"spec_yaml": yaml_text(budget={"monthly_cap": 40.0})},
+        BUILDER,
+    )
+    return agent_id
+
+
+def test_detail_omits_budget_for_end_user_and_non_owner_builder() -> None:
+    agent_id = _agent_with_two_versions()
+
+    for headers in (END_USER, BUILDER_2):
+        r = get(f"/v1/agents/{agent_id}", headers)
+
+        assert r.status_code == 200
+        specs = [v["spec"] for v in r.json()["versions"]]
+        assert len(specs) == 2
+        assert all("budget" not in spec for spec in specs)
+
+
+def test_detail_shows_budget_to_owner_and_admin() -> None:
+    agent_id = _agent_with_two_versions()
+
+    for headers in (BUILDER, ADMIN):
+        r = get(f"/v1/agents/{agent_id}", headers)
+
+        assert r.status_code == 200
+        assert [v["spec"]["budget"] for v in r.json()["versions"]] == [
+            {"monthly_cap": 25.0, "warning_fraction": 0.8},
+            {"monthly_cap": 40.0, "warning_fraction": 0.8},
+        ]
+
+
+def test_detail_differs_only_by_budget_between_callers() -> None:
+    agent_id = _agent_with_two_versions()
+    full = get(f"/v1/agents/{agent_id}", BUILDER).json()
+    assert get(f"/v1/agents/{agent_id}", ADMIN).json() == full
+
+    expected = full
+    for version in expected["versions"]:
+        del version["spec"]["budget"]
+    for headers in (END_USER, BUILDER_2):
+        assert get(f"/v1/agents/{agent_id}", headers).json() == expected
+
+
+def test_write_endpoints_return_budget_to_their_caller() -> None:
+    agent_id = create().json()["id"]
+
+    added = _post(
+        f"/v1/agents/{agent_id}/versions",
+        {"spec_yaml": yaml_text(budget={"monthly_cap": 40.0})},
+        BUILDER,
+    )
+    deployed = _post(f"/v1/agents/{agent_id}/versions/2/deploy", {}, BUILDER)
+    copied = _post(f"/v1/agents/{agent_id}/copy", {"slug": "my-copy"}, BUILDER_2)
+
+    for r in (added, deployed):
+        assert [v["spec"]["budget"]["monthly_cap"] for v in r.json()["versions"]] == [25.0, 40.0]
+    assert copied.json()["versions"][0]["spec"]["budget"]["monthly_cap"] == 40.0
 
 
 # --- versions ---------------------------------------------------------------
