@@ -6,6 +6,7 @@ to it. Functions flush or commit as noted; the stream itself is
 """
 
 import datetime as dt
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import and_, or_, select
@@ -13,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from hack_tx_2026 import agent_runtime, seams
 from hack_tx_2026.admin_reads import _b64, _unb64, _utc
-from hack_tx_2026.db.orm import Agent, Run, Thread
+from hack_tx_2026.db.orm import Agent, AgentVersion, Run, Thread, Ticket
 from hack_tx_2026.errors import ApiError
 from hack_tx_2026.identity import CurrentUser
 from hack_tx_2026.models.api import Page
@@ -99,6 +100,7 @@ def read_messages(thread: Thread) -> list[MessageOut]:
             role=entry["role"],  # type: ignore[arg-type]
             text=entry["text"],
             created_at=dt.datetime.fromisoformat(entry["created_at"]),
+            run_id=entry.get("run_id") if entry["role"] == "assistant" else None,
         )
         for entry in agent_runtime.read_transcript(thread.id)
     ]
@@ -126,4 +128,63 @@ def start_chat_run(
         thread.title = text.strip()[:TITLE_LENGTH]
     thread.last_updated_at = dt.datetime.now(dt.UTC)
     session.commit()
+    return run, version
+
+
+@dataclass(frozen=True)
+class FlagTarget:
+    """A run whose answer can be flagged, with the question it answered."""
+
+    run: Run
+    question: str
+    answer: str
+
+
+def flaggable_run(session: Session, user: CurrentUser, run_id: str) -> FlagTarget:
+    """The run to flag, checked before the re-check stream opens: 404 if
+    unknown, 403 if it is someone else's, 409 `already_flagged` if a ticket
+    exists for it, 409 `no_answer` if it never produced a final answer."""
+    run = session.get(Run, run_id)
+    if run is None:
+        raise ApiError(404, "run_not_found", "Run not found")
+    if run.user_id != user.id:
+        raise ApiError(403, "forbidden", "Only the person who got this answer can flag it")
+    if session.scalar(select(Ticket.id).where(Ticket.run_id == run.id)) is not None:
+        raise ApiError(409, "already_flagged", "This answer has already been flagged")
+    # A chat run's memory is its thread's; a re-check run's is its own.
+    entries = agent_runtime.read_transcript(run.thread_id or run.id)
+    question = next(
+        (e["text"] for e in entries if e["role"] == "user" and e.get("run_id") == run.id), None
+    )
+    answer = next(
+        (e["text"] for e in entries if e["role"] == "assistant" and e.get("run_id") == run.id),
+        None,
+    )
+    if question is None or answer is None:
+        raise ApiError(409, "no_answer", "This run has no answer to flag")
+    return FlagTarget(run=run, question=question, answer=answer)
+
+
+def start_recheck_run(
+    session: Session, user: CurrentUser, target: FlagTarget
+) -> tuple[Run, dict[str, Any]]:
+    """Files the ticket for a flagged answer, then creates the re-check run
+    on the same agent version (no thread: it runs on fresh memory) and
+    attaches it to the ticket. Commits. Returns the run and its version (as
+    `seams.read_agent_version` returns it)."""
+    flagged = target.run
+    version_row = session.get(AgentVersion, flagged.agent_version_id)
+    if version_row is None:  # pragma: no cover — FK guarantees this
+        raise ApiError(404, "run_not_found", "Run not found")
+    version = seams.read_agent_version(flagged.agent_id, version_row.version_number)
+    ticket_id = seams.create_ticket(flagged.id, target.question, target.answer, user.id)
+    run = Run(
+        agent_id=flagged.agent_id,
+        agent_version_id=flagged.agent_version_id,
+        user_id=user.id,
+        entry_point="recheck",
+    )
+    session.add(run)
+    session.commit()
+    seams.attach_recheck_run(ticket_id, run.id)
     return run, version
