@@ -1,70 +1,28 @@
 """Connector endpoints: list connectors, grant and revoke them per agent."""
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from hack_tx_2026 import connectors
-from hack_tx_2026.connectors import ConnectorLayerError
 from hack_tx_2026.db.base import get_session
-from hack_tx_2026.db.orm import Connector, ConnectorGrant, User
-from hack_tx_2026.models.connector_api import ConnectorOut, GrantOut, GrantRequest, ToolOut
-from hack_tx_2026.settings import get_settings
+from hack_tx_2026.db.orm import ConnectorGrant
+from hack_tx_2026.errors import ApiError
+from hack_tx_2026.identity import CurrentUser, get_current_user
+from hack_tx_2026.models.api import Page
+from hack_tx_2026.models.connector_api import ConnectorOut, GrantOut, GrantRequest
 
 # Included under the platform router, which supplies the /v1 prefix.
 router = APIRouter(tags=["connectors"])
 
+SessionDep = Annotated[Session, Depends(get_session)]
+UserDep = Annotated[CurrentUser, Depends(get_current_user)]
 
-# Ticket #13 (identity.py, seeded users) is in flight separately and isn't
-# on main yet. This is a minimal, self-contained stand-in for the
-# admin-only connector endpoints below — replace with the real
-# hack_tx_2026.identity.current_user once #13 merges.
-def _require_admin(request: Request, db: Session = Depends(get_session)) -> User:
-    header_name = get_settings().identity_header_name
-    user_id = request.headers.get(header_name)
-    if not user_id:
-        raise HTTPException(
-            status_code=401,
-            detail={
-                "error": {
-                    "code": "missing_identity_header",
-                    "message": f"The {header_name} header is required.",
-                    "details": None,
-                }
-            },
-        )
-    user = db.get(User, user_id)
-    if user is None:
-        raise HTTPException(
-            status_code=401,
-            detail={
-                "error": {
-                    "code": "unknown_user",
-                    "message": f"No user with id {user_id!r}.",
-                    "details": None,
-                }
-            },
-        )
+
+def _require_admin(user: CurrentUser) -> None:
     if user.role != "admin":
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "error": {
-                    "code": "forbidden",
-                    "message": "Only an admin can grant or revoke a connector.",
-                    "details": None,
-                }
-            },
-        )
-    return user
-
-
-def _connector_out(connector: Connector) -> ConnectorOut:
-    return ConnectorOut(
-        id=connector.id,
-        name=connector.name,
-        description=connector.description,
-        tools=[ToolOut(**tool) for tool in connector.tools],
-    )
+        raise ApiError(403, "forbidden", "Only admins can grant or revoke a connector")
 
 
 def _grant_out(grant: ConnectorGrant) -> GrantOut:
@@ -78,20 +36,26 @@ def _grant_out(grant: ConnectorGrant) -> GrantOut:
     )
 
 
-@router.get("/connectors", response_model=list[ConnectorOut])
-def list_connectors(db: Session = Depends(get_session)) -> list[ConnectorOut]:
-    rows = db.query(Connector).order_by(Connector.name).all()
-    return [_connector_out(c) for c in rows]
+@router.get("/connectors")
+def list_connectors(
+    db: SessionDep,
+    user: UserDep,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    cursor: str | None = None,
+) -> Page[ConnectorOut]:
+    return connectors.list_connectors(db, limit, cursor)
 
 
 @router.post("/connectors/{connector_id}/grants", response_model=GrantOut, status_code=201)
 def grant_connector(
     connector_id: str,
     body: GrantRequest,
-    db: Session = Depends(get_session),
-    admin: User = Depends(_require_admin),
+    db: SessionDep,
+    user: UserDep,
 ) -> GrantOut:
-    grant = connectors.grant_connector(db, connector_id, body.agent_id, admin.id)
+    _require_admin(user)
+    grant = connectors.grant_connector(db, connector_id, body.agent_id, user.id)
+    db.commit()
     return _grant_out(grant)
 
 
@@ -99,13 +63,9 @@ def grant_connector(
 def revoke_connector(
     connector_id: str,
     agent_id: str,
-    db: Session = Depends(get_session),
-    admin: User = Depends(_require_admin),
+    db: SessionDep,
+    user: UserDep,
 ) -> None:
-    try:
-        connectors.revoke_connector(db, connector_id, agent_id)
-    except ConnectorLayerError as exc:
-        raise HTTPException(
-            status_code=404,
-            detail={"error": {"code": exc.code, "message": exc.message, "details": None}},
-        ) from exc
+    _require_admin(user)
+    connectors.revoke_connector(db, connector_id, agent_id)
+    db.commit()
