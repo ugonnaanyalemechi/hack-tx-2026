@@ -11,7 +11,7 @@ from typing import Any, Protocol
 
 from sqlalchemy import select
 
-from hack_tx_2026 import budgets, tickets
+from hack_tx_2026 import budgets, connectors, tickets
 from hack_tx_2026.db.base import SessionLocal
 from hack_tx_2026.db.orm import Agent, AgentVersion
 from hack_tx_2026.models.records import EntryPoint
@@ -46,8 +46,12 @@ class RunResult:
 
 def load_agent_tools(agent_version_id: str) -> list[Tool]:
     """Owned by platform (connector layer). Loads only tools from connectors
-    granted to this agent and allowed by its spec's allow-list."""
-    raise NotImplementedError("owner:platform — connector layer, ticket #14")
+    granted to this agent and allowed by its spec's allow-list. Each tool
+    also has `call(**arguments) -> dict`, which runs it under the
+    connector's own account, never the chatting user's. Raises LookupError
+    if the version is unknown. Uses its own DB session."""
+    with SessionLocal() as session:
+        return list(connectors.load_agent_tools(session, agent_version_id))
 
 
 def check_agent_budget(agent_id: str) -> BudgetStatus:
