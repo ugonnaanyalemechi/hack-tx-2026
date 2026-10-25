@@ -19,6 +19,9 @@ class MessageOut(BaseModel):
     role: Literal["user", "assistant"]
     text: str
     created_at: dt.datetime
+    # The run that wrote an assistant message, so the UI can flag it (#30).
+    # Always null on user messages.
+    run_id: str | None = None
 
 
 class SendMessageRequest(BaseModel):
@@ -29,3 +32,7 @@ class DecisionRequest(BaseModel):
     """Body of POST /v1/approvals/{approval_id}/decision (ticket #24)."""
 
     decision: Literal["approve", "reject"]
+
+
+class FlagRequest(BaseModel):
+    """`POST /v1/runs/{run_id}/flag` takes an empty body (#30)."""
