@@ -405,3 +405,84 @@ def test_reaching_the_cap_pauses_every_open_chat_and_each_continues_after_approv
         ]
     # One more cap approved: $10 of $20 spent is under the warning line again.
     assert budget(client, agent_id)["state"] == "ok"
+
+
+def test_an_invoke_at_the_cap_answers_paused_without_calling_the_model(
+    client, fake_model, agent_id
+) -> None:
+    fake_model.script(reply("Spent it all", cost=Decimal(10)))
+    thread = new_thread(client, agent_id)
+    send(client, thread["id"], "Use up the budget")
+
+    r = client.post(f"/v1/agents/{agent_id}/invoke", json={"text": "Hello"}, headers=END_USER)
+
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["status"] == "paused"
+    assert body["message"] is None
+    assert body["approval"] is None
+    assert body["error"] is None
+    assert len(fake_model.requests) == 1
+    assert run_detail(client, body["run_id"])["run"]["status"] == "paused"
+
+
+def test_a_resumed_run_can_stop_again_for_an_approval(client, fake_model, agent_id) -> None:
+    thread, paused = pause_mid_run(client, fake_model, agent_id)
+    approve_spend(client, agent_id)
+    fake_model.script(reply(tool_calls=[tool_call("note", {"text": "remember this"}, id="c2")]))
+
+    events = resume(client, thread["id"])
+
+    assert types(events)[-2:] == ["approval_required", "run_finished"]
+    assert events[-1] == {"type": "run_finished", "status": "awaiting_approval"}
+    for r in (
+        client.post(f"/v1/threads/{thread['id']}/resume", headers=END_USER),
+        client.post(f"/v1/threads/{thread['id']}/messages", json={"text": "Hi"}, headers=END_USER),
+    ):
+        assert r.status_code == 409
+        assert error_code(r) == "approval_pending"
+    assert run_detail(client, paused[0]["run_id"])["run"]["status"] == "awaiting_approval"
+
+
+def test_a_budget_pause_after_an_approval_resumes_cleanly(client, fake_model, agent_id) -> None:
+    """The run asks for approval, the admin's approval is not enough because the
+    cap is hit by the approved run's next model call: it pauses, then continues."""
+    fake_model.script(
+        reply(tool_calls=[tool_call("note", {"text": "remember this"}, id="call_note")]),
+    )
+    thread = new_thread(client, agent_id)
+    asked = send(client, thread["id"], "Record a note")
+    approval_id = next(e["approval_id"] for e in asked if e["type"] == "approval_required")
+    run_id = asked[0]["run_id"]
+    # Another chat spends the whole cap while this one waits for its decision.
+    fake_model.script(reply("Spent it all", cost=Decimal(10)))
+    other = new_thread(client, agent_id)
+    send(client, other["id"], "Use up the budget")
+
+    with client.stream(
+        "POST",
+        f"/v1/approvals/{approval_id}/decision",
+        json={"decision": "approve"},
+        headers=END_USER,
+    ) as r:
+        assert r.status_code == 200, r.read()
+        body = "".join(r.iter_text())
+    decided = [
+        json.loads(line.removeprefix("data: "))
+        for line in body.splitlines()
+        if line.startswith("data: ")
+    ]
+
+    assert types(decided)[-2:] == ["budget_paused", "run_finished"]
+    assert decided[-1] == {"type": "run_finished", "status": "paused"}
+    assert run_detail(client, run_id)["run"]["status"] == "paused"
+    r = client.post(f"/v1/threads/{thread['id']}/resume", headers=END_USER)
+    assert r.status_code == 409
+    assert error_code(r) == "budget_paused"
+    approve_spend(client, agent_id)
+    fake_model.script(reply("Noted."))
+    resumed = resume(client, thread["id"])
+    assert resumed[-2:] == [
+        {"type": "message_complete", "text": "Noted."},
+        {"type": "run_finished", "status": "completed"},
+    ]
