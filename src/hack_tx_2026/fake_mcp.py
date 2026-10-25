@@ -11,8 +11,28 @@ CONNECTOR_NAME = "fake-mcp"
 ACCOUNT = "svc_fake_mcp"
 
 TOOL_DEFS = [
-    {"name": "lookup", "side_effect": False},
-    {"name": "note", "side_effect": True},
+    {
+        "name": "lookup",
+        "side_effect": False,
+        "description": "Read-only lookup of synthetic data for a query.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"query": {"type": "string", "description": "What to look up."}},
+            "required": ["query"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "note",
+        "side_effect": True,
+        "description": "Records a note on the fake MCP server's own account.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"text": {"type": "string", "description": "The note text."}},
+            "required": ["text"],
+            "additionalProperties": False,
+        },
+    },
 ]
 
 _notes: list[dict] = []

@@ -23,8 +23,34 @@ CONNECTOR_DESCRIPTION = (
 )
 
 TOOL_DEFS: list[dict[str, Any]] = [
-    {"name": "lookup_filing", "side_effect": False},
-    {"name": "save_note", "side_effect": True},
+    {
+        "name": "lookup_filing",
+        "side_effect": False,
+        "description": (
+            "Read-only: finds the quarterly filing of a company. Company matching is "
+            "case-insensitive and partial. Returns the filing and its citation id."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "company": {"type": "string", "description": "Company name, e.g. 'Larkspur'."},
+                "quarter": {"type": "string", "description": "Quarter, e.g. '2026-Q2'."},
+            },
+            "required": ["company", "quarter"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "save_note",
+        "side_effect": True,
+        "description": "Saves an analyst note under the connector's own account.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"text": {"type": "string", "description": "The note text."}},
+            "required": ["text"],
+            "additionalProperties": False,
+        },
+    },
 ]
 
 DATA_PATH = Path(__file__).parent / "data" / "filings.json"

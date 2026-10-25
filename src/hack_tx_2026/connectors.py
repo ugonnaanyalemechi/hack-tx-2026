@@ -7,7 +7,7 @@ Grant and revoke flush; callers commit.
 
 import datetime as dt
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from sqlalchemy import select
@@ -31,11 +31,28 @@ _SERVERS: dict[str, Callable[..., dict[str, Any]]] = {
 }
 
 
+# Each server's own tool definitions (description, input JSON Schema). Read
+# at load time rather than from the connector row, so rows seeded before
+# these fields existed still load complete tools.
+_SERVER_DEFS: dict[str, list[dict[str, Any]]] = {
+    fake_mcp.CONNECTOR_NAME: fake_mcp.TOOL_DEFS,
+    filings.CONNECTOR_NAME: filings.TOOL_DEFS,
+}
+
+
+class ToolNotLoadedError(PermissionError):
+    """The tool is not loaded for the agent version: its connector is not
+    granted (or the grant was revoked), the allow-list excludes it, or it
+    does not exist."""
+
+
 @dataclass
 class LoadedTool:
     connector_name: str
     name: str
     side_effect: bool
+    description: str = ""
+    input_schema: dict[str, Any] = field(default_factory=lambda: {"type": "object"})
 
     def call(self, **arguments: Any) -> dict[str, Any]:
         """Runs the tool on its connector's server, under the connector's own
@@ -160,8 +177,29 @@ def load_agent_tools(session: Session, agent_version_id: str) -> list[LoadedTool
             side_effect = (
                 bool(tool_def.get("side_effect")) or name in connector_spec.side_effect_tools
             )
+            server_def = next((d for d in _SERVER_DEFS[connector.name] if d["name"] == name), {})
             tools.append(
-                LoadedTool(connector_name=connector.name, name=name, side_effect=side_effect)
+                LoadedTool(
+                    connector_name=connector.name,
+                    name=name,
+                    side_effect=side_effect,
+                    description=server_def.get("description", ""),
+                    input_schema=server_def.get("input_schema", {"type": "object"}),
+                )
             )
 
     return tools
+
+
+def call_agent_tool(
+    session: Session, agent_version_id: str, tool_name: str, tool_input: dict[str, Any]
+) -> dict[str, Any]:
+    """Runs a tool only if it is loaded for this version. Raises
+    ToolNotLoadedError otherwise, and LookupError for an unknown version."""
+    for tool in load_agent_tools(session, agent_version_id):
+        if tool.name == tool_name:
+            return tool.call(**tool_input)
+    raise ToolNotLoadedError(
+        f"Tool {tool_name!r} is not loaded for agent version {agent_version_id}: "
+        "its connector is not granted, or it is not on the agent's allow-list."
+    )
