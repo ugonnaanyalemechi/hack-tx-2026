@@ -3,7 +3,7 @@ HTTP API, checking what ends up in the database.
 """
 
 from hack_tx_2026 import connectors
-from hack_tx_2026.db.orm import Agent, User
+from hack_tx_2026.db.orm import Agent
 
 
 def _headers(user_id: str) -> dict[str, str]:
@@ -33,8 +33,6 @@ def test_list_connectors_shows_the_fake_mcp_server(client, db_session) -> None:
 
 
 def test_grant_requires_admin(client, db_session) -> None:
-    db_session.add(User(id="usr_builder", name="Builder", role="builder"))
-    db_session.commit()
     connector = connectors.seed_fake_mcp_connector(db_session)
     agent = _make_agent(db_session, "usr_builder")
 
@@ -48,9 +46,6 @@ def test_grant_requires_admin(client, db_session) -> None:
 
 
 def test_admin_can_grant_and_revoke_a_connector_for_one_agent(client, db_session) -> None:
-    db_session.add(User(id="usr_admin", name="Admin", role="admin"))
-    db_session.add(User(id="usr_builder", name="Builder", role="builder"))
-    db_session.commit()
     connector = connectors.seed_fake_mcp_connector(db_session)
     agent = _make_agent(db_session, "usr_builder")
 
