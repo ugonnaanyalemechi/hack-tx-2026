@@ -94,7 +94,7 @@ export default function CatalogPage() {
             ))}
           </div>
           <Link
-            href="/build"
+            href="/build/new"
             className={cn(
               buttonVariants({ variant: "default" }),
               "ml-auto h-11 px-5 text-sm",
@@ -184,7 +184,7 @@ function StartBuildCard() {
         there.
       </p>
       <Link
-        href="/build"
+        href="/build/new"
         className={cn(
           buttonVariants({ variant: "outline", size: "sm" }),
           "mt-2 h-8 w-fit px-3.5",
