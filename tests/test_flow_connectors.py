@@ -305,3 +305,54 @@ def test_a_granted_connector_with_no_server_loads_no_tools(client, db_session, s
 def test_loading_tools_for_an_unknown_version_raises_lookup_error(client, seam_db) -> None:
     with pytest.raises(LookupError):
         seams.load_agent_tools("ver_missing")
+
+
+# --- Listing grants ---
+
+
+def test_admin_lists_active_grants_and_revoked_ones_are_left_out(
+    client, seam_db, fake_mcp_id
+) -> None:
+    kept = make_agent(client, {"name": "fake-mcp"}, slug="kept")
+    dropped = make_agent(client, {"name": "fake-mcp"}, slug="dropped")
+    grant(client, fake_mcp_id, kept)
+    grant(client, fake_mcp_id, dropped)
+    revoke(client, fake_mcp_id, dropped)
+
+    r = client.get("/v1/connectors/grants", headers=ADMIN)
+
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert [(g["connector_id"], g["agent_id"]) for g in items] == [(fake_mcp_id, kept)]
+    assert items[0]["granted_by"] == "usr_admin"
+    assert items[0]["revoked_at"] is None
+    assert r.json()["next_cursor"] is None
+
+
+@pytest.mark.parametrize("who", [BUILDER, {"X-User-Id": "usr_end_user"}])
+def test_listing_grants_requires_admin(client, fake_mcp_id, who) -> None:
+    r = client.get("/v1/connectors/grants", headers=who)
+
+    assert r.status_code == 403
+    assert r.json()["error"]["code"] == "forbidden"
+
+
+def test_grant_list_pages_with_a_cursor(client, seam_db, fake_mcp_id) -> None:
+    agents = {make_agent(client, {"name": "fake-mcp"}, slug=f"a{i}") for i in range(3)}
+    for agent_id in agents:
+        grant(client, fake_mcp_id, agent_id)
+
+    seen: set[str] = set()
+    cursor = None
+    pages = 0
+    while True:
+        params = {"limit": 2, **({"cursor": cursor} if cursor else {})}
+        body = client.get("/v1/connectors/grants", params=params, headers=ADMIN).json()
+        seen |= {g["agent_id"] for g in body["items"]}
+        pages += 1
+        cursor = body["next_cursor"]
+        if cursor is None:
+            break
+
+    assert pages == 2
+    assert seen == agents

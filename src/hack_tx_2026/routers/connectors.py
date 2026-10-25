@@ -22,7 +22,7 @@ UserDep = Annotated[CurrentUser, Depends(get_current_user)]
 
 def _require_admin(user: CurrentUser) -> None:
     if user.role != "admin":
-        raise ApiError(403, "forbidden", "Only admins can grant or revoke a connector")
+        raise ApiError(403, "forbidden", "Only admins can manage connector grants")
 
 
 def _grant_out(grant: ConnectorGrant) -> GrantOut:
@@ -44,6 +44,17 @@ def list_connectors(
     cursor: str | None = None,
 ) -> Page[ConnectorOut]:
     return connectors.list_connectors(db, limit, cursor)
+
+
+@router.get("/connectors/grants")
+def list_grants(
+    db: SessionDep,
+    user: UserDep,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    cursor: str | None = None,
+) -> Page[GrantOut]:
+    _require_admin(user)
+    return connectors.list_active_grants(db, limit, cursor)
 
 
 @router.post("/connectors/{connector_id}/grants", response_model=GrantOut, status_code=201)
