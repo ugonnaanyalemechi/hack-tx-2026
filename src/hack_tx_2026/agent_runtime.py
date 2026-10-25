@@ -27,9 +27,10 @@ Where later tickets plug in:
   that in `model` and `interrupt(...)`, then report it from `stream_chat`
   (BudgetPausedEvent, run_finished "paused"). Resume is a Command(resume=...)
   on the same thread, so `turn` survives the pause.
-- #24 side effects: side-effect tools are not offered to the model yet (see
-  `_offered_tools`), and calling one returns an error to the model. Offer them,
-  and in `tools` record an approval and `interrupt(...)` before running one.
+- #24 side effects (built): `tools` stops at a side-effect call, records an
+  approval and an approval step and streams ApprovalRequiredEvent; the
+  `approval` node then `interrupt`s, so the run ends "awaiting_approval".
+  `stream_decision` resumes it with Command(resume="approve" | "reject").
 """
 
 import datetime as dt
@@ -45,13 +46,15 @@ from langgraph.errors import GraphRecursionError
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.runtime import Runtime
+from langgraph.types import Command, interrupt
 
 from hack_tx_2026 import recorder, seams
 from hack_tx_2026.checkpointer import get_checkpointer
 from hack_tx_2026.db.base import SessionLocal
-from hack_tx_2026.db.orm import Run, Thread
+from hack_tx_2026.db.orm import Approval, Run, Thread
 from hack_tx_2026.gateway import Message, ModelCallError, ToolSchema, get_gateway
 from hack_tx_2026.models.events import (
+    ApprovalRequiredEvent,
     ErrorEvent,
     MessageCompleteEvent,
     RunFinishedEvent,
@@ -78,10 +81,18 @@ class TranscriptEntry(TypedDict):
     created_at: str  # ISO 8601, UTC
 
 
+class PendingApproval(TypedDict):
+    approval_id: str
+    tool_call_id: str
+    tool_name: str
+    tool_input: dict[str, Any]
+
+
 class ChatState(TypedDict, total=False):
     messages: Annotated[list[Message], _append]
     turn: list[Message]
     transcript: Annotated[list[TranscriptEntry], _append]
+    pending_approval: PendingApproval | None
 
 
 @dataclass(frozen=True)
@@ -99,8 +110,8 @@ def _now_iso() -> str:
 
 
 def _offered_tools(tools: list[seams.Tool]) -> list[seams.Tool]:
-    """The tools the model may call. Side-effect tools wait for approvals (#24)."""
-    return [t for t in tools if not t.side_effect]
+    """The tools the model may call. Side-effect tools run only once approved."""
+    return list(tools)
 
 
 def _schema(tool: seams.Tool) -> ToolSchema:
@@ -167,18 +178,99 @@ def _run_tool(ctx: RunContext, name: str, arguments: dict[str, Any]) -> dict[str
     return output
 
 
+def _request_approval(ctx: RunContext, name: str, arguments: dict[str, Any]) -> str:
+    """Records a pending approval and its approval step; returns the approval's id."""
+    with SessionLocal() as session:
+        approval = Approval(run_id=ctx.run_id, tool_name=name, tool_input=arguments)
+        session.add(approval)
+        session.flush()
+        recorder.record_step(
+            session,
+            ctx.run_id,
+            kind="approval",
+            name=name,
+            # approval_id lets run detail link this step to its approval (#42).
+            input={"approval_id": approval.id, "tool_input": arguments},
+        )
+        session.commit()
+        return approval.id
+
+
 def _tools_node(state: ChatState, runtime: Runtime[RunContext]) -> ChatState:
+    """Runs the latest model message's tool calls that have no result yet, in
+    order. Stops at a side-effect call: records an approval for it and leaves
+    it pending for the `approval` node."""
     write = get_stream_writer()
     turn = state["turn"]
+    index = max(i for i, m in enumerate(turn) if m.get("tool_calls"))
+    calls = turn[index]["tool_calls"]
+    answered = {m.get("tool_call_id") for m in turn[index + 1 :]}
+    side_effect = {t.name for t in runtime.context.tools if t.side_effect}
     results: list[Message] = []
-    for call in turn[-1]["tool_calls"]:
+    for position, call in enumerate(calls):
+        if call["id"] in answered:
+            continue
         name = call["function"]["name"]
         arguments = json.loads(call["function"].get("arguments") or "{}")
+        if name in side_effect:
+            update: ChatState = {}
+            text = turn[index].get("content") or ""
+            first_approval = not any(
+                c["function"]["name"] in side_effect for c in calls[:position]
+            )
+            if text and first_approval:
+                # What the model said before asking is a message of its own.
+                write(MessageCompleteEvent(text=text))
+                update["transcript"] = [
+                    {"role": "assistant", "text": text, "created_at": _now_iso()}
+                ]
+            approval_id = _request_approval(runtime.context, name, arguments)
+            write(ApprovalRequiredEvent(approval_id=approval_id, tool_name=name, tool_input=arguments))
+            pending: PendingApproval = {
+                "approval_id": approval_id,
+                "tool_call_id": call["id"],
+                "tool_name": name,
+                "tool_input": arguments,
+            }
+            return {**update, "turn": [*turn, *results], "pending_approval": pending}
         write(ToolCallEvent(name=name, input=arguments))
         output = _run_tool(runtime.context, name, arguments)
         write(ToolResultEvent(name=name, output=output))
         results.append({"role": "tool", "tool_call_id": call["id"], "content": json.dumps(output)})
     return {"turn": [*turn, *results]}
+
+
+def _after_tools(state: ChatState) -> str:
+    return "approval" if state.get("pending_approval") else "model"
+
+
+# What the model is told when the user rejects a side-effect call.
+DECLINED = {
+    "error": "declined",
+    "message": "The user declined this action, so it was not run. "
+    "Do not retry it; explain, or offer another way to help.",
+}
+
+
+def _approval_node(state: ChatState, runtime: Runtime[RunContext]) -> ChatState:
+    """Waits for the user's decision on the pending side-effect call. The
+    interrupt ends this stream; the decision resumes the run here."""
+    pending = state["pending_approval"]
+    assert pending is not None
+    decision = interrupt({"kind": "approval", "approval_id": pending["approval_id"]})
+    output: dict[str, Any] = DECLINED
+    if decision == "approve":
+        write = get_stream_writer()
+        name, arguments = pending["tool_name"], pending["tool_input"]
+        write(ToolCallEvent(name=name, input=arguments))
+        output = _run_tool(runtime.context, name, arguments)
+        write(ToolResultEvent(name=name, output=output))
+    result: Message = {
+        "role": "tool",
+        "tool_call_id": pending["tool_call_id"],
+        "content": json.dumps(output),
+    }
+    return {"turn": [*state["turn"], result], "pending_approval": None}
 
 
 def _respond_node(state: ChatState) -> ChatState:
@@ -198,9 +290,11 @@ def build_graph() -> CompiledStateGraph[ChatState, RunContext, ChatState, ChatSt
     graph.add_node("model", _model_node)
     graph.add_node("tools", _tools_node)
     graph.add_node("respond", _respond_node)
+    graph.add_node("approval", _approval_node)
     graph.add_edge(START, "model")
     graph.add_conditional_edges("model", _after_model, ["tools", "respond"])
-    graph.add_edge("tools", "model")
+    graph.add_conditional_edges("tools", _after_tools, ["approval", "model"])
+    graph.add_edge("approval", "tools")
     graph.add_edge("respond", END)
     return graph.compile(checkpointer=get_checkpointer())
 
@@ -234,6 +328,35 @@ def stream_chat(
     """Runs one chat turn on a thread and yields its stream events, from
     run_started to run_finished. The run row must already exist. Never raises:
     a failure is an ErrorEvent followed by run_finished("failed")."""
+    user_turn: ChatState = {
+        "turn": [{"role": "user", "content": text}],
+        "transcript": [{"role": "user", "text": text, "created_at": _now_iso()}],
+    }
+    yield from _stream_run(run_id, thread_id, agent_version_id, spec, user_turn)
+
+
+def stream_decision(
+    *, run_id: str, thread_id: str, agent_version_id: str, spec: dict[str, Any], decision: str
+) -> Iterator[Any]:
+    """Resumes a run stopped on an approval with the user's decision
+    ("approve" or "reject") and yields its events, like `stream_chat`."""
+    yield from _stream_run(run_id, thread_id, agent_version_id, spec, Command(resume=decision))
+
+
+def _awaits_approval(graph: CompiledStateGraph, thread_id: str) -> bool:
+    interrupts = graph.get_state(_config(thread_id)).interrupts
+    return any(
+        isinstance(i.value, dict) and i.value.get("kind") == "approval" for i in interrupts
+    )
+
+
+def _stream_run(
+    run_id: str,
+    thread_id: str,
+    agent_version_id: str,
+    spec: dict[str, Any],
+    graph_input: ChatState | Command,
+) -> Iterator[Any]:
     yield RunStartedEvent(run_id=run_id)
     status: RunFinishedStatus = "completed"
     error: ErrorEvent | None = None
@@ -244,13 +367,12 @@ def stream_chat(
             spec=AgentSpec.model_validate(spec),
             tools=seams.load_agent_tools(agent_version_id),
         )
-        user_turn: ChatState = {
-            "turn": [{"role": "user", "content": text}],
-            "transcript": [{"role": "user", "text": text, "created_at": _now_iso()}],
-        }
-        yield from build_graph().stream(
-            user_turn, _config(thread_id), context=context, stream_mode="custom"
+        graph = build_graph()
+        yield from graph.stream(
+            graph_input, _config(thread_id), context=context, stream_mode="custom"
         )
+        if _awaits_approval(graph, thread_id):
+            status = "awaiting_approval"
     except ModelCallError:
         error = ErrorEvent(code="model_error", message="The model could not answer. Try again.")
     except GraphRecursionError:

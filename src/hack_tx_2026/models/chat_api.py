@@ -23,3 +23,9 @@ class MessageOut(BaseModel):
 
 class SendMessageRequest(BaseModel):
     text: str = Field(min_length=1)
+
+
+class DecisionRequest(BaseModel):
+    """Body of POST /v1/approvals/{approval_id}/decision (ticket #24)."""
+
+    decision: Literal["approve", "reject"]

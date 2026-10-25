@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from hack_tx_2026 import agent_runtime, seams
 from hack_tx_2026.admin_reads import _b64, _unb64, _utc
-from hack_tx_2026.db.orm import Agent, Run, Thread
+from hack_tx_2026.db.orm import Agent, AgentVersion, Approval, Run, Thread
 from hack_tx_2026.errors import ApiError
 from hack_tx_2026.identity import CurrentUser
 from hack_tx_2026.models.api import Page
@@ -127,3 +127,53 @@ def start_chat_run(
     thread.last_updated_at = dt.datetime.now(dt.UTC)
     session.commit()
     return run, version
+
+
+# --- Approvals (ticket #24) ---
+
+
+def ensure_no_pending_approval(session: Session, thread: Thread) -> None:
+    """409 approval_pending while a run on the thread waits on a decision."""
+    pending = session.scalar(
+        select(Approval.id)
+        .join(Run, Run.id == Approval.run_id)
+        .where(Run.thread_id == thread.id, Approval.status == "pending")
+        .limit(1)
+    )
+    if pending is not None:
+        raise ApiError(409, "approval_pending", "Approve or reject the pending action first")
+
+
+def decidable_approval(session: Session, user: CurrentUser, approval_id: str) -> Approval:
+    """The pending approval, locked until the decision commits: 404 if unknown,
+    403 unless the caller is the run's user, 409 if already decided."""
+    approval = session.scalar(
+        select(Approval).where(Approval.id == approval_id).with_for_update()
+    )
+    if approval is None:
+        raise ApiError(404, "approval_not_found", "Approval not found")
+    run = session.get(Run, approval.run_id)
+    if run is None or run.user_id != user.id:
+        raise ApiError(403, "forbidden", "Only the person running this chat can decide")
+    if approval.status != "pending":
+        raise ApiError(409, "approval_already_decided", "This action was already decided")
+    return approval
+
+
+def decide_approval(
+    session: Session, user: CurrentUser, approval: Approval, decision: str
+) -> tuple[Run, dict[str, Any]]:
+    """Records who decided and when, marks the run running again, and commits.
+    Returns the run and the spec of the version it runs."""
+    run = session.get(Run, approval.run_id)
+    assert run is not None
+    approval.status = "approved" if decision == "approve" else "rejected"
+    approval.decided_by = user.id
+    approval.decided_at = dt.datetime.now(dt.UTC)
+    run.status = "running"
+    run.finished_at = None
+    version = session.get(AgentVersion, run.agent_version_id)
+    assert version is not None
+    spec = dict(version.spec)
+    session.commit()
+    return run, spec
