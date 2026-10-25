@@ -1,8 +1,8 @@
 import * as React from "react"
 import { cn } from "cn"
 
-// Themed to the Nocturne content card (docs/design-system.md §6, Cards):
-// 24px padding (20px for size="sm"), 20px radius, white 4% fill, default
+// Themed to the Foundry content card (docs/design-system.md §6, Cards):
+// 24px padding (20px for size="sm"), 12px radius, steel plate fill, default
 // hairline border and e1 elevation.
 
 function Card({
@@ -15,7 +15,7 @@ function Card({
       data-slot="card"
       data-size={size}
       className={cn(
-        "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl border border-border-default bg-surface-glass py-(--card-spacing) text-sm text-card-foreground shadow-e1 [--card-spacing:--spacing(6)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(5)] data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
+        "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl border border-border-default bg-surface-1 bg-plate py-(--card-spacing) text-sm text-card-foreground shadow-e1 [--card-spacing:--spacing(6)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(5)] data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
         className
       )}
       {...props}
@@ -43,7 +43,7 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
       className={cn(
         // Color comes from the card; a text color here would make the
         // class merger drop the custom text-h4 size.
-        "text-h4",
+        "font-serif text-h4",
         className
       )}
       {...props}
