@@ -106,6 +106,18 @@ def read_messages(thread: Thread) -> list[MessageOut]:
     ]
 
 
+def ensure_not_busy(session: Session, thread: Thread) -> None:
+    """409 thread_busy while another run on the thread is still going. Two runs
+    on one thread would overwrite each other's memory. Locks the thread row
+    until the caller commits, so two messages arriving together can't both pass."""
+    session.execute(select(Thread.id).where(Thread.id == thread.id).with_for_update())
+    running = session.scalar(
+        select(Run.id).where(Run.thread_id == thread.id, Run.status == "running").limit(1)
+    )
+    if running is not None:
+        raise ApiError(409, "thread_busy", "This chat is still answering the last message")
+
+
 def start_chat_run(
     session: Session, user: CurrentUser, thread: Thread, text: str
 ) -> tuple[Run, dict[str, Any]]:
@@ -116,6 +128,7 @@ def start_chat_run(
         version = seams.read_agent_version(thread.agent_id)
     except LookupError:
         raise ApiError(409, "no_live_version", "This agent has no live version yet") from None
+    ensure_not_busy(session, thread)
     run = Run(
         agent_id=thread.agent_id,
         agent_version_id=version["agent_version_id"],

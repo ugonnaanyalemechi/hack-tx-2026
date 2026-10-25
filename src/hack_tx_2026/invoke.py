@@ -77,11 +77,13 @@ def collect(run_id: str, events: Iterable[Any]) -> InvokeResponse:
 
 def invoke(session: Session, user: CurrentUser, agent_id: str, text: str) -> InvokeResponse:
     run, version = start_invoke_run(session, user, agent_id)
+    run_id = run.id
+    session.close()  # the run can take a while; don't hold a pooled connection meanwhile
     events = agent_runtime.stream_chat(
-        run_id=run.id,
-        thread_id=run.id,  # a fresh conversation, checkpointed under the run id
+        run_id=run_id,
+        thread_id=run_id,  # a fresh conversation, checkpointed under the run id
         agent_version_id=version["agent_version_id"],
         spec=version["spec"],
         text=text,
     )
-    return collect(run.id, events)
+    return collect(run_id, events)

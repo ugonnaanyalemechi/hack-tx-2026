@@ -11,6 +11,7 @@ import socket
 import threading
 import time
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 
 import httpx
 import pytest
@@ -193,6 +194,58 @@ def test_a_client_that_disconnects_mid_stream_leaves_no_running_run(
         gate.release.set()
         server.should_exit = True
         runner.join(timeout=10)
+
+
+# --- Concurrent chats ---
+
+
+def test_more_concurrent_chats_than_the_connection_pool_can_hold(
+    client, install_model, agent_id, test_engine
+) -> None:
+    pool = test_engine.pool
+    chats = pool.size() + pool._max_overflow + 5  # type: ignore[attr-defined]
+    install_model(EchoTogether(parties=chats))
+    threads = [new_thread(client, agent_id) for _ in range(chats)]
+
+    # Chats start a moment apart, as real users do: the point is how many are
+    # in flight at once, not every request landing in the same instant.
+    with ThreadPoolExecutor(max_workers=chats) as executor:
+        futures = []
+        for t in threads:
+            futures.append(executor.submit(send, client, t["id"], "Hi"))
+            time.sleep(0.05)
+        streams = [f.result(timeout=60) for f in futures]
+
+    for events in streams:
+        assert events[-1] == {"type": "run_finished", "status": "completed"}
+
+
+# --- A busy thread ---
+
+
+def test_a_second_message_while_a_run_is_in_flight_is_409_thread_busy(
+    client, install_model, agent_id
+) -> None:
+    gate = Gate()
+    install_model(gate)
+    thread = new_thread(client, agent_id)
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        first = executor.submit(send, client, thread["id"], "First")
+        assert gate.started.wait(timeout=10)
+        r = client.post(
+            f"/v1/threads/{thread['id']}/messages", json={"text": "Second"}, headers=END_USER
+        )
+        gate.release.set()
+        events = first.result(timeout=20)
+
+    assert r.status_code == 409
+    assert r.json()["error"]["code"] == "thread_busy"
+    assert events[-1] == {"type": "run_finished", "status": "completed"}
+    messages = client.get(f"/v1/threads/{thread['id']}/messages", headers=END_USER).json()
+    assert [(m["role"], m["text"]) for m in messages] == [("user", "First"), ("assistant", "Done.")]
+    # Once the run has finished the thread takes messages again.
+    assert send(client, thread["id"], "Third")[-1]["status"] == "completed"
 
 
 # --- Bad tool arguments ---
