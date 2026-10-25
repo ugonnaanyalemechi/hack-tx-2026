@@ -5,10 +5,6 @@
 Agent Platform: a platform where a single YAML agent spec (model, instructions, MCP connectors, context, evals, budget) defines an agent that can be run, metered, tested and shared. Main use case is the financial domain, for both developers and non-developers.
 
 Read these before starting any task:
-
-- `docs/spec.md` for what we are building and what is in or out of scope
-- `docs/design.md` for architecture, contracts, database tables, streaming events and folder layout
-- `GLOSSARY.md` for the glossary (agent, version, thread, run, step, approval, ticket, grant). Use these terms exactly.
 - `docs/design-system.md` and `docs/design/` for the target UI (mockups and tokens)
 
 If these docs disagree with a ticket, stop and flag it on the ticket instead of picking one.
@@ -81,10 +77,6 @@ Issues live in GitHub Issues (`gh` CLI). See `docs/agents/issue-tracker.md`.
 ### Triage labels
 
 Default five-label vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
 ## Team and ownership
 
