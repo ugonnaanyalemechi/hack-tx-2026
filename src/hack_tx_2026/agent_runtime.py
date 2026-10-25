@@ -21,8 +21,8 @@ thread's id:
 
 Where later tickets plug in:
 
-- #16 output guard: in `respond`, before MessageCompleteEvent: guard the final
-  text, record guard steps, stream a GuardNoteEvent when it changed something.
+- #16 output guard (done): `respond` calls `output_guard.guard_text`, records an
+  `output_guard` step and streams GuardNoteEvents before MessageCompleteEvent.
 - #22 budget pause: `ModelGateway._check_budget` raises before a call; catch
   that in `model` and `interrupt(...)`, then report it from `stream_chat`
   (BudgetPausedEvent, run_finished "paused"). Resume is a Command(resume=...)
@@ -46,13 +46,14 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.runtime import Runtime
 
-from hack_tx_2026 import recorder, seams
+from hack_tx_2026 import output_guard, recorder, seams
 from hack_tx_2026.checkpointer import get_checkpointer
 from hack_tx_2026.db.base import SessionLocal
 from hack_tx_2026.db.orm import Run, Thread
 from hack_tx_2026.gateway import Message, ModelCallError, ToolSchema, get_gateway
 from hack_tx_2026.models.events import (
     ErrorEvent,
+    GuardNoteEvent,
     MessageCompleteEvent,
     RunFinishedEvent,
     RunFinishedStatus,
@@ -181,13 +182,44 @@ def _tools_node(state: ChatState, runtime: Runtime[RunContext]) -> ChatState:
     return {"turn": [*turn, *results]}
 
 
-def _respond_node(state: ChatState) -> ChatState:
+def _guard_answer(ctx: RunContext, text: str) -> str:
+    """Runs the output guard on the final text, records its step and streams a
+    GuardNoteEvent per change. Returns the text the user gets."""
+    started = time.monotonic()
+    guardrails = ctx.spec.guardrails
+    result = output_guard.guard_text(text, guardrails)
+    with SessionLocal() as session:
+        recorder.record_step(
+            session,
+            ctx.run_id,
+            kind="guard",
+            name="output_guard",
+            input={
+                "require_citation": guardrails.require_citation,
+                "strip_secrets": guardrails.strip_secrets,
+            },
+            output={
+                "secrets_stripped": result.secrets_stripped,
+                "blocked": result.blocked,
+                "notes": result.notes,
+            },
+            latency_ms=int((time.monotonic() - started) * 1000),
+        )
+        session.commit()
+    write = get_stream_writer()
+    for note in result.notes:
+        write(GuardNoteEvent(note=note))
+    return result.text
+
+
+def _respond_node(state: ChatState, runtime: Runtime[RunContext]) -> ChatState:
     turn = state["turn"]
-    text = turn[-1].get("content") or ""
-    # The output guard (#16) runs here, before message_complete.
+    text = _guard_answer(runtime.context, turn[-1].get("content") or "")
     get_stream_writer()(MessageCompleteEvent(text=text))
+    # Memory keeps the guarded text, never what the model first said.
+    final: Message = {**turn[-1], "content": text}
     return {
-        "messages": turn,
+        "messages": [*turn[:-1], final],
         "turn": [],
         "transcript": [{"role": "assistant", "text": text, "created_at": _now_iso()}],
     }
