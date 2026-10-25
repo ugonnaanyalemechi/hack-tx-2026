@@ -9,6 +9,11 @@
  */
 
 import type {
+  AdminQueue,
+  BudgetList,
+  BudgetOut,
+} from "@/lib/contracts/budgets";
+import type {
   AgentListItem,
   CatalogItem,
   ErrorBody,
@@ -41,6 +46,14 @@ export interface ApiClient {
   getRun(runId: string): Promise<RunDetailWithApprovals>;
   /** `GET /v1/usage`: spend by agent and by day. */
   getUsage(params?: UsageParams): Promise<UsageReport>;
+  /** `GET /v1/agents/{id}/budget`: admin or the agent's owner only. */
+  getBudget(agentId: string): Promise<BudgetOut>;
+  /** `POST /v1/agents/{id}/budget/approve`: admin only. No amount grants one more base cap. */
+  approveSpend(agentId: string, amount?: string | null): Promise<BudgetOut>;
+  /** `GET /v1/admin/budgets`: every agent's budget, admin only. */
+  listBudgets(): Promise<BudgetList>;
+  /** `GET /v1/admin/queue`: what needs an admin (paused budgets, blocked deploys, tickets). */
+  getAdminQueue(): Promise<AdminQueue>;
 }
 
 /** An `ErrorResponse` from the API (or a network failure, status 0). */

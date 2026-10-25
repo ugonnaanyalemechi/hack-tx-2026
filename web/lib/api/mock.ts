@@ -24,7 +24,9 @@ import type {
   RunStepEntry,
   UserPublic,
 } from "@/lib/contracts/api";
+import type { AdminQueue, BudgetOut } from "@/lib/contracts/budgets";
 import { ApiError, type ApiClient } from "@/lib/api/client";
+import { mockApproveSpend, mockGetBudget, mockListBudgets } from "@/lib/api/mock-budgets";
 import {
   MOCK_AGENTS,
   MOCK_RUNS,
@@ -140,6 +142,18 @@ export function createMockClient(options: MockClientOptions): ApiClient {
       : common;
   }
 
+  function requireAdmin(user: UserPublic) {
+    if (user.role !== "admin") {
+      throw new ApiError(403, { code: "forbidden", message: "Only admins can do this" });
+    }
+  }
+
+  function budgetOrNotFound(agentId: string): BudgetOut {
+    const budget = mockGetBudget(agentId);
+    if (!budget) throw new ApiError(404, { code: "agent_not_found", message: "Agent not found" });
+    return budget;
+  }
+
   return {
     listUsers: () => respond(() => MOCK_USERS.map((u) => ({ ...u })), { ignoreScenario: true }),
 
@@ -216,6 +230,53 @@ export function createMockClient(options: MockClientOptions): ApiClient {
           }))
           .sort((a, b) => byCodepoint(a.day, b.day));
         return { by_agent, by_day };
+      }),
+
+    getBudget: (agentId) =>
+      respond(() => {
+        const user = caller();
+        const budget = budgetOrNotFound(agentId);
+        if (user.role !== "admin" && getAgent(agentId).owner_id !== user.id) {
+          throw new ApiError(403, {
+            code: "forbidden",
+            message: "Only the owner or an admin can see this budget",
+          });
+        }
+        return budget;
+      }),
+
+    approveSpend: (agentId, amount) =>
+      respond(() => {
+        requireAdmin(caller());
+        budgetOrNotFound(agentId);
+        const approved = mockApproveSpend(agentId, amount ? Number(amount) : null);
+        return budgetOrNotFound(approved?.agent_id ?? agentId);
+      }),
+
+    listBudgets: () =>
+      respond(() => {
+        requireAdmin(caller());
+        return { items: isEmpty() ? [] : mockListBudgets() };
+      }),
+
+    getAdminQueue: () =>
+      respond((): AdminQueue => {
+        requireAdmin(caller());
+        const items = isEmpty() ? [] : mockListBudgets();
+        return {
+          items: items
+            .filter((b) => b.state === "paused")
+            .map((b) => ({
+              kind: "budget_pause" as const,
+              agent_id: b.agent_id,
+              agent_name: b.agent_name,
+              spent: b.spent,
+              cap: b.cap,
+              extra_allowance: b.extra_allowance,
+              cap_total: b.cap_total,
+              since: b.updated_at,
+            })),
+        };
       }),
   };
 }
