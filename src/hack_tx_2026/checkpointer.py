@@ -9,6 +9,7 @@ Callers take the process-wide saver from `get_checkpointer()`; tests install
 one over the test database with `set_checkpointer()`.
 """
 
+import threading
 from typing import Any
 
 import sqlalchemy
@@ -46,17 +47,34 @@ def open_checkpointer(database_url: str | sqlalchemy.URL, max_size: int = 10) ->
 
 
 _installed: PooledSaver | None = None
+_lock = threading.Lock()
 
 
 def get_checkpointer() -> PooledSaver:
-    """The process-wide saver over the app database, opened on first use."""
+    """The process-wide saver over the app database.
+
+    The app opens it at start-up (see `app.lifespan`). Code outside the app
+    gets it opened on first use; the lock makes concurrent first callers
+    share one saver instead of each opening a pool.
+    """
     global _installed
-    if _installed is None:
-        _installed = open_checkpointer(get_settings().database_url)
-    return _installed
+    with _lock:
+        if _installed is None:
+            _installed = open_checkpointer(get_settings().database_url)
+        return _installed
 
 
 def set_checkpointer(saver: PooledSaver | None) -> None:
     """Install the process-wide saver (tests install one over the test database)."""
     global _installed
-    _installed = saver
+    with _lock:
+        _installed = saver
+
+
+def close_checkpointer() -> None:
+    """Closes the process-wide saver, if one is open, so the next use starts fresh."""
+    global _installed
+    with _lock:
+        saver, _installed = _installed, None
+    if saver is not None:
+        saver.close()
