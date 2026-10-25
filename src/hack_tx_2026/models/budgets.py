@@ -49,8 +49,19 @@ class BlockedDeployItem(BaseModel):
     since: dt.datetime
 
 
+class OpenTicketItem(BaseModel):
+    kind: Literal["open_ticket"] = "open_ticket"
+    ticket_id: str
+    agent_id: str
+    agent_name: str
+    question: str
+    since: dt.datetime
+
+
 # Admin queue entries are a discriminated union on `kind`.
-QueueItem = Annotated[BudgetPauseItem | BlockedDeployItem, Field(discriminator="kind")]
+QueueItem = Annotated[
+    BudgetPauseItem | BlockedDeployItem | OpenTicketItem, Field(discriminator="kind")
+]
 
 
 class AdminQueue(BaseModel):
