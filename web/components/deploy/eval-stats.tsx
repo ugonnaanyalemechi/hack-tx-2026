@@ -29,7 +29,7 @@ export function EvalStats({
   ];
 
   return (
-    <dl className="grid grid-cols-3 rounded-xl border border-border-default bg-white/3">
+    <dl className="grid grid-cols-3 rounded-xl border border-border-default bg-surface-1">
       {stats.map((stat) => (
         <div
           key={stat.caption}

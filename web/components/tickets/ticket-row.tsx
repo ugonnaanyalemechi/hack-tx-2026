@@ -3,7 +3,7 @@
 /**
  * One flag ticket: the question, who flagged it and when, its status, and
  * the actions. Resolve and save-as-test-case render only when `canAct`
- * (admins and the agent's owner); everyone else just reads.
+ * (an admin, or the owner of the ticket's agent); everyone else just reads.
  */
 
 import Link from "next/link";
@@ -25,7 +25,7 @@ function statusBadge(ticket: TicketListItem) {
   return { label: "Open", tone: "warning" as const };
 }
 
-function message(error: unknown): string {
+function errorMessage(error: unknown): string {
   return error instanceof ApiError ? error.message : "Something went wrong. Try again.";
 }
 
@@ -55,7 +55,7 @@ export function TicketRow({
     try {
       onResolved(await api.resolveTicket(ticket.id));
     } catch (error) {
-      setResolveError(message(error));
+      setResolveError(errorMessage(error));
     } finally {
       setResolving(false);
     }
@@ -69,7 +69,7 @@ export function TicketRow({
       await api.saveTicketAsTestCase(ticket.id, body);
       setSave("saved");
     } catch (error) {
-      setSaveError(message(error));
+      setSaveError(errorMessage(error));
       setSave("form");
     }
   }
@@ -97,7 +97,7 @@ export function TicketRow({
               size="sm"
               aria-expanded={save === "form" || save === "saving"}
               onClick={() => setSave(save === "idle" ? "form" : "idle")}
-              className="rounded-pill px-3"
+              className="px-3"
             >
               Save as test case
             </Button>
@@ -110,14 +110,14 @@ export function TicketRow({
               size="sm"
               disabled={resolving}
               onClick={resolve}
-              className="rounded-pill px-3"
+              className="px-3"
             >
               {resolving ? "Resolving…" : "Resolve"}
             </Button>
           ) : null}
           <Link
             href={`/admin/runs?run=${encodeURIComponent(ticket.recheck_run_id ?? ticket.run_id)}`}
-            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "rounded-pill px-3")}
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "px-3")}
           >
             View run
           </Link>

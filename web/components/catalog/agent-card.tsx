@@ -29,7 +29,7 @@ export function AgentCard({ agent, ownerName }: { agent: CatalogItem; ownerName:
             href={`/chat?agent=${encodeURIComponent(agent.id)}`}
             className={cn(
               buttonVariants({ variant: "outline", size: "sm" }),
-              "h-8 rounded-pill px-3.5"
+              "h-8 px-3.5"
             )}
           >
             Open chat

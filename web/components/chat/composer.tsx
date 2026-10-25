@@ -40,12 +40,12 @@ export function Composer({
         placeholder={placeholder ?? `Ask ${agentName}`}
         disabled={disabled}
         aria-label={`Ask ${agentName}`}
-        className="h-11 flex-1 rounded-pill border-border-default bg-white/4 px-4 text-sm"
+        className="h-11 flex-1 border-border-default bg-white/4 px-4 text-sm"
       />
       <Button
         type="submit"
         disabled={disabled || value.trim().length === 0}
-        className="h-11 shrink-0 gap-1.5 rounded-pill bg-steel px-5 text-sm font-medium text-text-inverse hover:brightness-110"
+        className="h-11 shrink-0 gap-1.5 bg-steel px-5 text-sm font-medium text-text-inverse hover:brightness-110"
       >
         Send
         <Send className="size-3.5" aria-hidden />

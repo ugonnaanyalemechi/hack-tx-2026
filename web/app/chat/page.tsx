@@ -15,7 +15,7 @@ import {
   subscribeMockBudgets,
 } from "@/lib/api/mock-budgets";
 import {
-  MOCK_AGENT,
+  getMockChatAgent,
   getSeedChats,
   mockContinueRun,
   mockDecideApproval,
@@ -73,12 +73,14 @@ function ChatPageInner() {
   const forceDecideError = searchParams.get("decideError") === "1";
   const forceFlagError = searchParams.get("flagError") === "1";
   const budgetPreview = searchParams.get("budget");
+  // The agent named by ?agent=<id>, from the mock catalog (mock only).
+  const agent = getMockChatAgent(searchParams.get("agent"));
 
   // The agent's budget state (never its cost) from the mock store, which
   // follows the admin approving spend in another tab.
   const budgetState = useSyncExternalStore(
     subscribeMockBudgets,
-    () => mockBudgetState(MOCK_AGENT.id),
+    () => mockBudgetState(agent.id),
     () => "ok" as const
   );
   const [pausedRun, setPausedRun] = useState<PausedRun | null>(null);
@@ -88,12 +90,12 @@ function ChatPageInner() {
     message: string;
   } | null>(null);
 
-  // Preview/test hook: ?budget=ok|warned|paused sets the mock agent's spend.
+  // Mock-only preview/test hook: ?budget=ok|warned|paused sets the mock agent's spend.
   useEffect(() => {
     if (budgetPreview === "ok" || budgetPreview === "warned" || budgetPreview === "paused") {
-      mockSetSpendShare(MOCK_AGENT.id, BUDGET_PREVIEW_SHARE[budgetPreview]);
+      mockSetSpendShare(agent.id, BUDGET_PREVIEW_SHARE[budgetPreview]);
     }
-  }, [budgetPreview]);
+  }, [budgetPreview, agent.id]);
 
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [chatsState, setChatsState] = useState<"loading" | "error" | "ready">(
@@ -118,13 +120,13 @@ function ChatPageInner() {
           setChatsState("error");
           return;
         }
-        const seeded = forceEmpty ? [] : getSeedChats();
+        const seeded = forceEmpty ? [] : getSeedChats(agent.id);
         setChats(seeded);
         setActiveChatId(seeded[0]?.id ?? null);
         setChatsState("ready");
       }, 350);
     },
-    [forceEmpty, forceChatsError]
+    [forceEmpty, forceChatsError, agent.id]
   );
 
   useEffect(() => {
@@ -297,7 +299,7 @@ function ChatPageInner() {
     setIsStreaming(true);
     let events: AsyncIterable<StreamEvent>;
     try {
-      events = await mockSendMessage(MOCK_AGENT.id, userText, { speed: streamSpeed });
+      events = await mockSendMessage(agent.id, userText, { speed: streamSpeed });
     } catch (error) {
       setIsStreaming(false);
       const code = error instanceof ApiError ? error.code : "";
@@ -328,7 +330,7 @@ function ChatPageInner() {
     setContinueNotice(null);
     const run = pausedRun;
     try {
-      const events = await mockContinueRun(MOCK_AGENT.id, run?.userText ?? null, {
+      const events = await mockContinueRun(agent.id, run?.userText ?? null, {
         speed: streamSpeed,
       });
       setPausedRun(null);
@@ -427,7 +429,11 @@ function ChatPageInner() {
     if (!activeChatId) return;
     const chatId = activeChatId;
     const chat = chats.find((c) => c.id === chatId);
-    const index = chat?.messages.findIndex((m) => m.id === messageId) ?? -1;
+    const flagged = chat?.messages.find((m) => m.id === messageId);
+    // A re-check answer can be flagged too; its question is the one the
+    // original answer it re-checks was asked.
+    const answerId = flagged?.role === "assistant" && flagged.recheckOf ? flagged.recheckOf : messageId;
+    const index = chat?.messages.findIndex((m) => m.id === answerId) ?? -1;
     const question = index > 0 ? chat?.messages[index - 1] : undefined;
     if (!chat || !question || question.role !== "user") return;
 
@@ -470,6 +476,7 @@ function ChatPageInner() {
     setFlag(chatId, messageId, { status: "rechecked" });
   }
 
+  // RUNTIME-PLACEHOLDER(#15): switching chats is a timed fake of loading a thread; replace with the thread read.
   function handleSelectChat(chatId: string) {
     if (chatId === activeChatId) return;
     setThreadState("loading");
@@ -479,6 +486,7 @@ function ChatPageInner() {
     }, 250);
   }
 
+  // RUNTIME-PLACEHOLDER(#15): a new chat only exists client-side until its first send creates a thread; replace with the thread-create call.
   function handleNewChat() {
     setActiveChatId(null);
     setThreadState("ready");
@@ -526,7 +534,7 @@ function ChatPageInner() {
       <TopNav />
       <div className="flex min-h-0 flex-1">
         <ChatSidebar
-          agent={MOCK_AGENT}
+          agent={agent}
           chats={chats}
           chatsState={chatsState}
           activeChatId={activeChatId}
@@ -537,19 +545,19 @@ function ChatPageInner() {
         />
         <main className="flex min-h-0 flex-1 flex-col">
           {budgetState === "warned" && !showPaused ? (
-            <BudgetWarningBanner agentName={MOCK_AGENT.name} />
+            <BudgetWarningBanner agentName={agent.name} />
           ) : null}
           <ChatThread
             messages={activeMessages}
             threadState={threadState}
-            agentName={MOCK_AGENT.name}
+            agentName={agent.name}
             onRetryMessage={handleRetryMessage}
             onFlag={handleFlag}
             onDecide={handleDecide}
             footer={
               showPaused ? (
                 <BudgetPausedCard
-                  agentName={MOCK_AGENT.name}
+                  agentName={agent.name}
                   approved={approved}
                   continuing={continuing}
                   notice={continueNotice}
@@ -559,7 +567,7 @@ function ChatPageInner() {
             }
           />
           <Composer
-            agentName={MOCK_AGENT.name}
+            agentName={agent.name}
             disabled={isStreaming || awaitingDecision || showPaused}
             placeholder={
               showPaused

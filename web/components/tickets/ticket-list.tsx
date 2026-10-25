@@ -15,8 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { TicketListItem, TicketStatus } from "@/lib/contracts/tickets";
-import { canOpenAdmin, useIdentity } from "@/lib/identity";
-import { usePagedQuery } from "@/lib/use-api-query";
+import { useIdentity } from "@/lib/identity";
+import { useApiQuery, usePagedQuery } from "@/lib/use-api-query";
 
 const FILTERS: { label: string; status: TicketStatus | null }[] = [
   { label: "All", status: null },
@@ -25,7 +25,7 @@ const FILTERS: { label: string; status: TicketStatus | null }[] = [
 ];
 
 export function TicketList() {
-  const { users, role } = useIdentity();
+  const { users, role, currentUser } = useIdentity();
   const [status, setStatus] = useState<TicketStatus | null>(null);
   // Tickets resolved here, keyed by id, layered over the loaded pages.
   const [resolved, setResolved] = useState<Record<string, TicketListItem>>({});
@@ -33,6 +33,17 @@ export function TicketList() {
   const tickets = usePagedQuery(`tickets:${status ?? "all"}`, (api, cursor) =>
     api.listTickets({ status, cursor, limit: 20 })
   );
+
+  // Who owns each agent, so actions show only to an admin or that agent's owner.
+  const agents = useApiQuery("agents:owners", (api) => api.listAgents({ limit: 100 }));
+  const ownerOf = useMemo(
+    () =>
+      new Map(agents.status === "ready" ? agents.data.items.map((a) => [a.id, a.owner_id]) : []),
+    [agents]
+  );
+  const canAct = (ticket: TicketListItem) =>
+    role === "admin" ||
+    (currentUser !== null && ownerOf.get(ticket.agent_id) === currentUser.id);
 
   const names = useMemo(
     () => new Map(users.status === "ready" ? users.users.map((u) => [u.id, u.name]) : []),
@@ -45,7 +56,6 @@ export function TicketList() {
           .map((t) => resolved[t.id] ?? t)
           .filter((t) => status === null || t.status === status)
       : [];
-  const canAct = canOpenAdmin(role);
 
   return (
     <div className="flex flex-col gap-4">
@@ -85,7 +95,7 @@ export function TicketList() {
                     key={ticket.id}
                     ticket={ticket}
                     flaggedBy={names.get(ticket.created_by) ?? ticket.created_by}
-                    canAct={canAct}
+                    canAct={canAct(ticket)}
                     onResolved={(updated) =>
                       setResolved((prev) => ({ ...prev, [updated.id]: updated }))
                     }
@@ -106,7 +116,7 @@ export function TicketList() {
                   size="sm"
                   onClick={tickets.loadMore}
                   disabled={tickets.loadingMore}
-                  className="mt-3 self-center rounded-pill px-4"
+                  className="mt-3 self-center px-4"
                 >
                   {tickets.loadingMore ? "Loading…" : "Load more"}
                 </Button>
