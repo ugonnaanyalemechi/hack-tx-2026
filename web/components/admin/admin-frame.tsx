@@ -21,7 +21,6 @@ const ADMIN_SECTIONS = [
   { label: "Usage", href: "/admin/usage" },
   { label: "Tickets", href: "/admin/tickets" },
   { label: "Budgets", href: "/admin/budgets" },
-  { label: "Tickets", href: "/admin/tickets" },
 ];
 
 export function AdminSections() {

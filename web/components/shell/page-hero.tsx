@@ -1,7 +1,7 @@
 /**
  * The top band of a product screen: overline, a two-tone H1 (the claim in
  * white, the second line muted, P4), an optional lead paragraph, and a
- * slot on the right (section tabs). Carries the view's single cobalt glow.
+ * slot on the right (section tabs). Carries the view's single amber glow.
  */
 
 import type { ReactNode } from "react";

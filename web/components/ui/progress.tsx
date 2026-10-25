@@ -3,7 +3,7 @@
 import { Progress as ProgressPrimitive } from "@base-ui/react/progress"
 import { cn } from "cn"
 
-// Themed to Nocturne: progress is a cobalt (primary.500) fill on a faint track.
+// Themed to Foundry: progress is an amber (primary.500) fill on a faint track.
 
 function Progress({
   className,

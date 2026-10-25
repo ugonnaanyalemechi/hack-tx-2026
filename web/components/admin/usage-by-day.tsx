@@ -26,7 +26,7 @@ function fillDays(rows: DayUsage[]): DayUsage[] {
 }
 
 /**
- * Spend per day: a single-series column chart (one cobalt hue, no legend,
+ * Spend per day: a single-series column chart (one amber hue, no legend,
  * the card title names it), with the busiest day labelled and a tooltip on
  * every column. The table under it is the chart's text view.
  */
