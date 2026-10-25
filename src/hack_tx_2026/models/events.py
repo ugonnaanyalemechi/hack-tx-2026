@@ -1,9 +1,22 @@
 """Chat stream events.
 
 Every chat call returns an SSE stream that starts with run_started and ends
-with run_finished. The guard runs before message_complete, so the UI must
-always replace the streamed token preview with the final guarded text.
-error is always followed by run_finished.
+with run_finished — no exceptions. The guard runs before message_complete,
+so the UI must always replace the streamed token preview with the final
+guarded text.
+
+run_finished.status is what actually tells the client how the run ended;
+treat it as the one thing to switch on, not "which event arrived last":
+
+- completed: message_complete already carried the final text.
+- awaiting_approval: approval_required already carried the approval_id —
+  immediately followed by this run_finished, then the connection closes.
+  Nothing else follows in this stream; resuming is a new call (resume).
+- paused: budget_paused already carried the agent_id — immediately
+  followed by this run_finished, then the connection closes. Resuming
+  (Continue) is a new call.
+- failed: error already carried the code/message — error is always
+  immediately followed by this run_finished.
 """
 
 from typing import Annotated, Literal
@@ -38,7 +51,8 @@ class ToolResultEvent(BaseModel):
 
 
 class ApprovalRequiredEvent(BaseModel):
-    """Terminal for the stream: the stream ends after this event."""
+    """Always immediately followed by run_finished(status="awaiting_approval"),
+    then the connection closes. No more tokens follow in this stream."""
 
     type: Literal["approval_required"] = "approval_required"
     approval_id: str
@@ -47,6 +61,9 @@ class ApprovalRequiredEvent(BaseModel):
 
 
 class BudgetPausedEvent(BaseModel):
+    """Always immediately followed by run_finished(status="paused"), then
+    the connection closes. No more tokens follow in this stream."""
+
     type: Literal["budget_paused"] = "budget_paused"
     agent_id: str
 
