@@ -23,10 +23,16 @@ Where later tickets plug in:
 
 - #16 output guard: in `respond`, before MessageCompleteEvent: guard the final
   text, record guard steps, stream a GuardNoteEvent when it changed something.
-- #22 budget pause: `ModelGateway._check_budget` raises before a call; catch
-  that in `model` and `interrupt(...)`, then report it from `stream_chat`
-  (BudgetPausedEvent, run_finished "paused"). Resume is a Command(resume=...)
-  on the same thread, so `turn` survives the pause.
+- #22 budget pause (built): the gateway raises BudgetPausedError before a call
+  when the agent is at its cap; `model` catches it and `interrupt`s with
+  {"reason": "budget_paused", ...}. `_stream_run` sees the pending interrupt
+  after the graph stops (`pending_interrupt`) and streams BudgetPausedEvent +
+  run_finished("paused"). `resume_chat` continues the same run with
+  Command(resume=True) on the same thread, so `turn` survives the pause.
+  Other interrupts (#24 approvals) plug in the same way: interrupt with their
+  own "reason", report it in `_stream_run`, resume through `resume_chat`.
+  The run that crosses the warning fraction streams BudgetWarningEvent (#61)
+  before run_finished.
 - #24 side effects: side-effect tools are not offered to the model yet (see
   `_offered_tools`), and calling one returns an error to the model. Offer them,
   and in `tools` record an approval and `interrupt(...)` before running one.
@@ -37,6 +43,7 @@ import json
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Annotated, Any, TypedDict
 
 from langchain_core.runnables import RunnableConfig
@@ -45,13 +52,22 @@ from langgraph.errors import GraphRecursionError
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.runtime import Runtime
+from langgraph.types import Command, interrupt
 
 from hack_tx_2026 import recorder, seams
 from hack_tx_2026.checkpointer import get_checkpointer
 from hack_tx_2026.db.base import SessionLocal
 from hack_tx_2026.db.orm import Run, Thread
-from hack_tx_2026.gateway import Message, ModelCallError, ToolSchema, get_gateway
+from hack_tx_2026.gateway import (
+    BudgetPausedError,
+    Message,
+    ModelCallError,
+    ToolSchema,
+    get_gateway,
+)
 from hack_tx_2026.models.events import (
+    BudgetPausedEvent,
+    BudgetWarningEvent,
     ErrorEvent,
     MessageCompleteEvent,
     RunFinishedEvent,
@@ -123,14 +139,31 @@ def _model_node(state: ChatState, runtime: Runtime[RunContext]) -> ChatState:
         *state.get("messages", []),
         *turn,
     ]
-    reply = get_gateway().call(
-        ctx.run_id,
-        model=ctx.spec.model,
-        messages=history,
-        tools=[_schema(t) for t in _offered_tools(ctx.tools)],
-        on_token=lambda text: write(TokenEvent(text=text)),
-    )
+    while True:
+        try:
+            reply = get_gateway().call(
+                ctx.run_id,
+                model=ctx.spec.model,
+                messages=history,
+                tools=[_schema(t) for t in _offered_tools(ctx.tools)],
+                on_token=lambda text: write(TokenEvent(text=text)),
+            )
+            break
+        except BudgetPausedError as exc:
+            agent_id = exc.agent_id
+        _pause_for_budget(ctx.run_id, agent_id)
     return {"turn": [*turn, reply.message]}
+
+
+BUDGET_PAUSED = "budget_paused"
+
+
+def _pause_for_budget(run_id: str, agent_id: str) -> None:
+    """Stops the run at a budget pause (LangGraph interrupt): the turn so far is
+    already in the checkpoint. Continue resumes it with Command(resume=...),
+    which re-runs `model` from the top: the call is tried again, and if the
+    agent is still paused the run pauses again here."""
+    interrupt({"reason": BUDGET_PAUSED, "run_id": run_id, "agent_id": agent_id})
 
 
 def _after_model(state: ChatState) -> str:
@@ -228,15 +261,70 @@ def _finish(run_id: str, thread_id: str, status: RunFinishedStatus) -> None:
         session.commit()
 
 
+def _budget_warning(run_id: str, spec: dict[str, Any]) -> BudgetWarningEvent | None:
+    """A BudgetWarningEvent if this run's spend took the agent's budget past
+    its warning fraction: spend before the run was under the line and spend
+    now is at or over it. None otherwise, or if the budget can't be read."""
+    try:
+        fraction = Decimal(str(AgentSpec.model_validate(spec).budget.warning_fraction))
+        with SessionLocal() as session:
+            run = session.get(Run, run_id)
+            if run is None:
+                return None
+            agent_id, run_cost = run.agent_id, Decimal(run.cost_total or 0)
+        status = seams.check_agent_budget(agent_id)
+    except Exception:
+        return None
+    line = Decimal(str(status.cap + status.extra_allowance)) * fraction
+    spent = Decimal(str(status.spent))
+    if spent - run_cost < line <= spent:
+        return BudgetWarningEvent(agent_id=agent_id)
+    return None
+
+
 def stream_chat(
     *, run_id: str, thread_id: str, agent_version_id: str, spec: dict[str, Any], text: str
 ) -> Iterator[Any]:
     """Runs one chat turn on a thread and yields its stream events, from
     run_started to run_finished. The run row must already exist. Never raises:
     a failure is an ErrorEvent followed by run_finished("failed")."""
+    user_turn: ChatState = {
+        "turn": [{"role": "user", "content": text}],
+        "transcript": [{"role": "user", "text": text, "created_at": _now_iso()}],
+    }
+    yield from _stream_run(run_id, thread_id, agent_version_id, spec, user_turn)
+
+
+def resume_chat(
+    *, run_id: str, thread_id: str, agent_version_id: str, spec: dict[str, Any]
+) -> Iterator[Any]:
+    """Continues a thread's stopped run from its checkpoint and yields its
+    stream events, from run_started (the same run id) to run_finished. The
+    caller has checked that the run is stopped and may go on. Never raises."""
+    yield from _stream_run(run_id, thread_id, agent_version_id, spec, Command(resume=True))
+
+
+def pending_interrupt(thread_id: str) -> dict[str, Any] | None:
+    """The value a thread's stopped run interrupted with (for a budget pause:
+    reason "budget_paused", run_id, agent_id), or None if nothing is stopped."""
+    state = build_graph().get_state(_config(thread_id))
+    for pending in state.interrupts:
+        if isinstance(pending.value, dict):
+            return pending.value
+    return None
+
+
+def _stream_run(
+    run_id: str,
+    thread_id: str,
+    agent_version_id: str,
+    spec: dict[str, Any],
+    graph_input: ChatState | Command,
+) -> Iterator[Any]:
     yield RunStartedEvent(run_id=run_id)
     status: RunFinishedStatus = "completed"
     error: ErrorEvent | None = None
+    paused: BudgetPausedEvent | None = None
     try:
         context = RunContext(
             run_id=run_id,
@@ -244,13 +332,12 @@ def stream_chat(
             spec=AgentSpec.model_validate(spec),
             tools=seams.load_agent_tools(agent_version_id),
         )
-        user_turn: ChatState = {
-            "turn": [{"role": "user", "content": text}],
-            "transcript": [{"role": "user", "text": text, "created_at": _now_iso()}],
-        }
         yield from build_graph().stream(
-            user_turn, _config(thread_id), context=context, stream_mode="custom"
+            graph_input, _config(thread_id), context=context, stream_mode="custom"
         )
+        stopped = pending_interrupt(thread_id)
+        if stopped is not None and stopped.get("reason") == BUDGET_PAUSED:
+            paused = BudgetPausedEvent(agent_id=stopped["agent_id"])
     except ModelCallError:
         error = ErrorEvent(code="model_error", message="The model could not answer. Try again.")
     except GraphRecursionError:
@@ -259,8 +346,14 @@ def stream_chat(
         )
     except Exception:
         error = ErrorEvent(code="internal_error", message="Something went wrong. Try again.")
+    warning = _budget_warning(run_id, spec)
+    if warning is not None:
+        yield warning
     if error is not None:
         status = "failed"
         yield error
+    elif paused is not None:
+        status = "paused"
+        yield paused
     _finish(run_id, thread_id, status)
     yield RunFinishedEvent(status=status)

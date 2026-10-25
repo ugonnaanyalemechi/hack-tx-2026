@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from hack_tx_2026 import agent_runtime, chat
 from hack_tx_2026.db.base import get_session
-from hack_tx_2026.db.orm import Thread
+from hack_tx_2026.db.orm import Run, Thread
 from hack_tx_2026.identity import CurrentUser, get_current_user
 from hack_tx_2026.models.api import Page
 from hack_tx_2026.models.chat_api import MessageOut, SendMessageRequest, ThreadOut
@@ -35,6 +35,26 @@ def get_owned_thread(thread_id: str, session: SessionDep, user: UserDep) -> Thre
 
 
 OwnedThreadDep = Annotated[Thread, Depends(get_owned_thread)]
+
+
+def get_sendable_thread(thread: OwnedThreadDep, session: SessionDep) -> Thread:
+    """The owned thread, if it may take a new message (409 approval_pending
+    or budget_paused otherwise), checked before the stream opens."""
+    chat.check_can_send(session, thread)
+    return thread
+
+
+SendableThreadDep = Annotated[Thread, Depends(get_sendable_thread)]
+
+
+def get_resumed_run(thread: OwnedThreadDep, session: SessionDep) -> tuple[Run, dict[str, Any]]:
+    """The owned thread's paused run, marked running again, with its version's
+    spec (409 approval_pending, nothing_to_resume or budget_paused otherwise),
+    checked before the stream opens."""
+    return chat.start_resume(session, thread)
+
+
+ResumedRunDep = Annotated[tuple[Run, dict[str, Any]], Depends(get_resumed_run)]
 
 
 def _sse(events: Iterator[Any]) -> Iterator[str]:
@@ -65,7 +85,7 @@ def list_messages(thread: OwnedThreadDep) -> list[MessageOut]:
 
 @router.post("/threads/{thread_id}/messages")
 def send_message(
-    body: SendMessageRequest, thread: OwnedThreadDep, session: SessionDep, user: UserDep
+    body: SendMessageRequest, thread: SendableThreadDep, session: SessionDep, user: UserDep
 ) -> StreamingResponse:
     """Streams the run's events (models/events.py) as server-sent events."""
     run, version = chat.start_chat_run(session, user, thread, body.text)
@@ -75,6 +95,21 @@ def send_message(
         agent_version_id=version["agent_version_id"],
         spec=version["spec"],
         text=body.text,
+    )
+    return StreamingResponse(
+        _sse(events),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/threads/{thread_id}/resume")
+def resume_thread(thread: OwnedThreadDep, resumed: ResumedRunDep) -> StreamingResponse:
+    """Continue: resumes the thread's paused run from its checkpoint and streams
+    its events (models/events.py) as server-sent events."""
+    run, spec = resumed
+    events = agent_runtime.resume_chat(
+        run_id=run.id, thread_id=thread.id, agent_version_id=run.agent_version_id, spec=spec
     )
     return StreamingResponse(
         _sse(events),

@@ -9,8 +9,9 @@ plus thinking tokens, all billed as output.
 
 Rate-limited (429) and unavailable (503) calls are retried with exponential
 backoff, but only before the first token streams. A call that still fails is
-recorded with its error and raised as ModelCallError. The budget check before
-each call belongs in `ModelGateway._check_budget` (#22).
+recorded with its error and raised as ModelCallError. Before each call the
+gateway checks the agent's budget (`seams.check_agent_budget`): an agent at
+its cap raises BudgetPausedError and nothing reaches the model (#22).
 
 Callers take the process-wide gateway from `get_gateway()` and call it with
 OpenAI-style chat messages and tool schemas (the format LiteLLM takes):
@@ -32,7 +33,7 @@ from typing import Any, Protocol
 
 from sqlalchemy.orm import Session
 
-from hack_tx_2026 import recorder
+from hack_tx_2026 import recorder, seams
 from hack_tx_2026.db.base import SessionLocal
 from hack_tx_2026.db.orm import Run
 from hack_tx_2026.models.spec import ACCEPTED_MODEL
@@ -128,6 +129,15 @@ class RetryableModelError(Exception):
     unavailable (503) before sending any token. The gateway retries it."""
 
 
+class BudgetPausedError(Exception):
+    """Raised by the gateway, before calling the model, when the agent's budget
+    is paused at its cap. Nothing is recorded; the caller pauses the run."""
+
+    def __init__(self, agent_id: str) -> None:
+        super().__init__(f"agent {agent_id} is paused at its budget cap")
+        self.agent_id = agent_id
+
+
 class ModelCallError(Exception):
     """Raised by the gateway when a call fails for good. The failed step is already recorded."""
 
@@ -173,7 +183,8 @@ class ModelGateway:
 
         Raises ModelCallError, after recording the failed step, if the call
         fails for good. Nothing reaches the model if the model is unpriced
-        (UnpricedModelError) or the run is unknown (LookupError).
+        (UnpricedModelError), the run is unknown (LookupError) or the agent's
+        budget is paused (BudgetPausedError).
         """
         if model not in PRICES:
             raise UnpricedModelError(f"no price for model {model!r}")
@@ -227,10 +238,10 @@ class ModelGateway:
             return run.agent_id
 
     def _check_budget(self, agent_id: str) -> None:
-        """Runs before every model call. The budget pause belongs here (#22):
-        call `seams.check_agent_budget(agent_id)` and raise a pause instead of
-        calling the model when the agent is paused. Until then every call goes
-        ahead."""
+        """Runs before every model call, so every open chat with the agent
+        pauses at its next call once the cap is reached."""
+        if seams.check_agent_budget(agent_id).state == "paused":
+            raise BudgetPausedError(agent_id)
 
     def _complete_with_retry(
         self,

@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from hack_tx_2026 import agent_runtime, seams
 from hack_tx_2026.admin_reads import _b64, _unb64, _utc
-from hack_tx_2026.db.orm import Agent, Run, Thread
+from hack_tx_2026.db.orm import Agent, AgentVersion, Approval, Run, Thread
 from hack_tx_2026.errors import ApiError
 from hack_tx_2026.identity import CurrentUser
 from hack_tx_2026.models.api import Page
@@ -127,3 +127,74 @@ def start_chat_run(
     thread.last_updated_at = dt.datetime.now(dt.UTC)
     session.commit()
     return run, version
+
+
+def _pending_approval(session: Session, thread: Thread) -> bool:
+    stmt = (
+        select(Approval.id)
+        .join(Run, Run.id == Approval.run_id)
+        .where(Run.thread_id == thread.id, Approval.status == "pending")
+        .limit(1)
+    )
+    return session.scalar(stmt) is not None
+
+
+def _paused_run(session: Session, thread: Thread, *, lock: bool = False) -> Run | None:
+    """The thread's run stopped at a budget pause, waiting for Continue. With
+    `lock`, the row stays locked until commit, so two Continues can't both win."""
+    stmt = (
+        select(Run)
+        .where(Run.thread_id == thread.id, Run.status == "paused")
+        .order_by(Run.created_at.desc())
+        .limit(1)
+    )
+    return session.scalar(stmt.with_for_update() if lock else stmt)
+
+
+def _agent_budget_paused(agent_id: str) -> bool:
+    try:
+        return seams.check_agent_budget(agent_id).state == "paused"
+    except LookupError:  # no versions yet: start_chat_run reports that
+        return False
+
+
+def _approval_pending_error() -> ApiError:
+    return ApiError(409, "approval_pending", "This chat is waiting for an approval decision")
+
+
+def _budget_paused_error() -> ApiError:
+    return ApiError(
+        409, "budget_paused", "This agent is paused at its budget cap, waiting for an admin"
+    )
+
+
+def check_can_send(session: Session, thread: Thread) -> None:
+    """A new message needs a chat that is not stopped: 409 approval_pending
+    while an approval is pending, 409 budget_paused while the chat has a run
+    paused at the budget (until Continue) or the agent's budget is paused."""
+    if _pending_approval(session, thread):
+        raise _approval_pending_error()
+    if _paused_run(session, thread) is not None or _agent_budget_paused(thread.agent_id):
+        raise _budget_paused_error()
+
+
+def start_resume(session: Session, thread: Thread) -> tuple[Run, dict[str, Any]]:
+    """Checks the thread's stopped run may continue and marks it running again.
+    409 approval_pending while an approval is pending, 409 nothing_to_resume
+    if no run is paused, 409 budget_paused until an admin approves more spend.
+    Returns the run and its version's spec."""
+    if _pending_approval(session, thread):
+        raise _approval_pending_error()
+    run = _paused_run(session, thread, lock=True)
+    if run is None:
+        raise ApiError(409, "nothing_to_resume", "This chat has no paused run to continue")
+    if _agent_budget_paused(thread.agent_id):
+        raise _budget_paused_error()
+    version = session.get(AgentVersion, run.agent_version_id)
+    if version is None:  # runs keep their version; guard for type narrowing
+        raise ApiError(500, "version_missing", "The paused run's version is missing")
+    run.status = "running"
+    run.finished_at = None
+    thread.last_updated_at = dt.datetime.now(dt.UTC)
+    session.commit()
+    return run, version.spec
