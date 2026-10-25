@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from hack_tx_2026 import budgets, eval_runner
+from hack_tx_2026 import budgets, eval_runner, tickets
 from hack_tx_2026.db.base import get_session
 from hack_tx_2026.errors import ApiError
 from hack_tx_2026.identity import CurrentUser, get_current_user
@@ -52,5 +52,9 @@ def list_budgets(session: SessionDep, user: UserDep) -> BudgetList:
 def admin_queue(session: SessionDep, user: UserDep) -> AdminQueue:
     _require_admin(user)
     queue = budgets.admin_queue(session)
-    items = [*queue.items, *eval_runner.blocked_deploy_items(session)]
+    items = [
+        *queue.items,
+        *eval_runner.blocked_deploy_items(session),
+        *tickets.open_ticket_items(session),
+    ]
     return AdminQueue(items=sorted(items, key=lambda i: i.since))

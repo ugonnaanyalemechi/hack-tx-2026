@@ -1,7 +1,7 @@
 """The seams between owner:platform and owner:runtime.
 
 Platform owns and implements load_agent_tools, check_agent_budget,
-create_ticket and read_agent_version; runtime calls them. run_agent is
+create_ticket, attach_recheck_run and read_agent_version; runtime calls them. run_agent is
 owned by runtime (its behavior is runtime's); platform's eval runner calls
 it. All bodies here are placeholders until the owning ticket lands —
 callers should only rely on the signatures below.
@@ -11,7 +11,7 @@ from typing import Any, Protocol
 
 from sqlalchemy import select
 
-from hack_tx_2026 import budgets
+from hack_tx_2026 import budgets, tickets
 from hack_tx_2026.db.base import SessionLocal
 from hack_tx_2026.db.orm import Agent, AgentVersion
 from hack_tx_2026.models.records import EntryPoint
@@ -66,8 +66,23 @@ def check_agent_budget(agent_id: str) -> BudgetStatus:
 
 def create_ticket(run_id: str, question: str, answer: str, created_by: str) -> str:
     """Owned by platform. Called by runtime when an answer is flagged.
-    Returns the new ticket's id."""
-    raise NotImplementedError("owner:platform — tickets, ticket #29")
+    Returns the new ticket's id. Raises LookupError if the run is unknown.
+    Uses its own DB session."""
+    with SessionLocal() as session:
+        ticket = tickets.create_ticket(
+            session, run_id=run_id, question=question, answer=answer, created_by=created_by
+        )
+        session.commit()
+        return ticket.id
+
+
+def attach_recheck_run(ticket_id: str, recheck_run_id: str) -> None:
+    """Owned by platform. Called by runtime after the flag's re-check run
+    starts, to link it to the ticket. Raises LookupError if the ticket or
+    the run is unknown. Uses its own DB session."""
+    with SessionLocal() as session:
+        tickets.attach_recheck_run(session, ticket_id=ticket_id, recheck_run_id=recheck_run_id)
+        session.commit()
 
 
 def read_agent_version(agent_id: str, version_number: int | None = None) -> dict[str, Any]:

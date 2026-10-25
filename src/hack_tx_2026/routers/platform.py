@@ -23,6 +23,7 @@ from hack_tx_2026.models.registry import (
 from hack_tx_2026.routers.admin_reads import router as admin_reads_router
 from hack_tx_2026.routers.budgets import router as budgets_router
 from hack_tx_2026.routers.evals import router as evals_router
+from hack_tx_2026.routers.tickets import router as tickets_router
 
 router = APIRouter(prefix="/v1", tags=["platform"])
 
@@ -95,3 +96,4 @@ def deploy_agent_version(
 router.include_router(admin_reads_router)
 router.include_router(budgets_router)
 router.include_router(evals_router)
+router.include_router(tickets_router)
