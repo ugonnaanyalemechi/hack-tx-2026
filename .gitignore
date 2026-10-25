@@ -26,4 +26,7 @@ Thumbs.db
 
 # Editor files
 .idea/
+
+# Agent worktrees and local Claude settings
+.claude/
 *.swp

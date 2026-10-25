@@ -6,32 +6,54 @@ The runtime only ever sees this parsed form.
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
+from pydantic_core import PydanticCustomError
 
 ACCEPTED_MODEL: Literal["gemini/gemini-3.8-flash"] = "gemini/gemini-3.8-flash"
 
 
-class ConnectorSpec(BaseModel):
+class _SpecSection(BaseModel):
+    """Rejects unknown keys, so a misspelled field is an error, not ignored."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ConnectorSpec(_SpecSection):
     name: str
     allow_list: list[str] | None = None
     side_effect_tools: list[str] = Field(default_factory=list)
 
+    @field_validator("side_effect_tools")
+    @classmethod
+    def _side_effects_are_allowed(cls, tools: list[str], info: ValidationInfo) -> list[str]:
+        allow_list = info.data.get("allow_list")
+        if allow_list is None:
+            return tools
+        missing = [t for t in tools if t not in allow_list]
+        if missing:
+            raise PydanticCustomError(
+                "side_effect_not_allowed",
+                "side_effect_tools must also be in allow_list; missing: {missing}",
+                {"missing": ", ".join(missing)},
+            )
+        return tools
 
-class BudgetSpec(BaseModel):
-    monthly_cap: float
-    warning_fraction: float = 0.8
+
+class BudgetSpec(_SpecSection):
+    monthly_cap: float = Field(gt=0)
+    warning_fraction: float = Field(default=0.8, gt=0, le=1)
 
 
-class EvalsSpec(BaseModel):
-    min_score: float
+class EvalsSpec(_SpecSection):
+    min_score: float = Field(ge=0, le=1)
 
 
-class GuardrailsSpec(BaseModel):
+class GuardrailsSpec(_SpecSection):
     require_citation: bool = True
     strip_secrets: bool = True
 
 
-class AgentSpec(BaseModel):
+class AgentSpec(_SpecSection):
     spec_version: Literal[1] = 1
     name: str
     slug: str

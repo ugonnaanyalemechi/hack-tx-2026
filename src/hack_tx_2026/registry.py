@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from hack_tx_2026.admin_reads import can_read_run_log
 from hack_tx_2026.db.orm import Agent, AgentVersion, EvalReport
 from hack_tx_2026.errors import ApiError
 from hack_tx_2026.eval_runner import report_out, run_evals
@@ -49,6 +50,8 @@ def parse_spec(spec_yaml: str) -> tuple[AgentSpec | None, list[SpecError]]:
             field = ".".join(str(p) for p in e["loc"])
             if e["type"] == "none_required" and field == "trigger":
                 message = "trigger is reserved and must be empty"
+            elif e["type"] == "extra_forbidden":
+                message = f"Unknown field '{e['loc'][-1]}'; check the spelling"
             else:
                 message = e["msg"]
             errors.append(SpecError(field=field, message=message))
@@ -125,7 +128,14 @@ def _list_item(agent: Agent, versions: list[AgentVersion]) -> AgentListItem:
     )
 
 
-def _detail(session: Session, agent: Agent) -> AgentDetail:
+def _spec_for(user: CurrentUser, agent: Agent, spec: dict[str, Any]) -> dict[str, Any]:
+    """Stories 27/65: budget is cost info, omitted unless the caller is an admin or the owner."""
+    if can_read_run_log(user, agent.owner_id):
+        return spec
+    return {k: v for k, v in spec.items() if k != "budget"}
+
+
+def _detail(session: Session, agent: Agent, user: CurrentUser) -> AgentDetail:
     versions = _versions(session, agent.id)
     return AgentDetail(
         **_list_item(agent, versions).model_dump(),
@@ -134,7 +144,7 @@ def _detail(session: Session, agent: Agent) -> AgentDetail:
                 version_number=v.version_number,
                 status=v.status,
                 created_at=v.created_at,
-                spec=v.spec,
+                spec=_spec_for(user, agent, v.spec),
             )
             for v in versions
         ],
@@ -168,7 +178,7 @@ def create_agent(session: Session, user: CurrentUser, spec_yaml: str) -> AgentDe
     require_creator(user)
     spec = _valid_spec(spec_yaml)
     agent = _insert_agent(session, user.id, spec, spec.model_dump(mode="json"))
-    return _detail(session, agent)
+    return _detail(session, agent, user)
 
 
 def add_version(session: Session, user: CurrentUser, agent_id: str, spec_yaml: str) -> AgentDetail:
@@ -190,7 +200,7 @@ def add_version(session: Session, user: CurrentUser, agent_id: str, spec_yaml: s
         )
     )
     session.commit()
-    return _detail(session, agent)
+    return _detail(session, agent, user)
 
 
 def copy_agent(
@@ -214,7 +224,7 @@ def copy_agent(
         spec_json["name"] = name
     spec = AgentSpec.model_validate(spec_json)
     agent = _insert_agent(session, user.id, spec, spec.model_dump(mode="json"))
-    return _detail(session, agent)
+    return _detail(session, agent, user)
 
 
 def _find_version(session: Session, agent: Agent, version_number: int) -> AgentVersion:
@@ -239,7 +249,11 @@ def deploy_version(
 
     Normal deploy (no override_reason): owner only. Runs the evals; a passing
     report deploys and makes the version live, a failing one marks it
-    "blocked" and never changes the live version. Both return 200.
+    "blocked" and never changes the live version. Both return 200. A deploy
+    makes a version live; it does not re-test the live one, so deploying the
+    version that is already live is a 409 "already_live" that changes nothing
+    (no evals, no new report). This keeps the live version from ever being
+    "blocked". Draft and blocked versions can be deployed (again) as usual.
 
     Override (override_reason given): admin only (any admin, owner or not).
     The reason must be non-blank and the version must be "blocked". Evals are
@@ -250,6 +264,8 @@ def deploy_version(
     if override_reason is None:
         _require_owner(agent, user, "deploy")
         version = _find_version(session, agent, version_number)
+        if version.id == agent.live_version_id:
+            raise ApiError(409, "already_live", f"Version {version_number} is already live")
         report = run_evals(session, version, user.id)
         if report.passed:
             version.status = "deployed"
@@ -272,12 +288,12 @@ def deploy_version(
         agent.live_version_id = version.id
     session.commit()
     return DeployResponse(
-        **_detail(session, agent).model_dump(), eval_report=report_out(session, report)
+        **_detail(session, agent, user).model_dump(), eval_report=report_out(session, report)
     )
 
 
-def get_agent_detail(session: Session, agent_id: str) -> AgentDetail:
-    return _detail(session, _get_agent(session, agent_id))
+def get_agent_detail(session: Session, user: CurrentUser, agent_id: str) -> AgentDetail:
+    return _detail(session, _get_agent(session, agent_id), user)
 
 
 def _encode_cursor(slug: str) -> str:
