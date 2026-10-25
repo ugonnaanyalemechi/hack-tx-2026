@@ -40,6 +40,18 @@ _SERVER_DEFS: dict[str, list[dict[str, Any]]] = {
 }
 
 
+def _server_def(connector_name: str, tool_name: str) -> dict[str, Any]:
+    """A tool's description and input schema from its server's definitions,
+    with defaults for a tool (or connector) the servers don't define."""
+    server_def = next(
+        (d for d in _SERVER_DEFS.get(connector_name, []) if d["name"] == tool_name), {}
+    )
+    return {
+        "description": server_def.get("description", ""),
+        "input_schema": server_def.get("input_schema", {"type": "object"}),
+    }
+
+
 class ToolNotLoadedError(PermissionError):
     """The tool is not loaded for the agent version: its connector is not
     granted (or the grant was revoked), the allow-list excludes it, or it
@@ -105,7 +117,14 @@ def list_connectors(session: Session, limit: int, cursor: str | None) -> Page[Co
             id=c.id,
             name=c.name,
             description=c.description,
-            tools=[ToolOut(**tool) for tool in c.tools],
+            tools=[
+                ToolOut(
+                    name=tool["name"],
+                    side_effect=tool["side_effect"],
+                    **_server_def(c.name, tool["name"]),
+                )
+                for tool in c.tools
+            ],
         )
         for c in page
     ]
@@ -177,14 +196,12 @@ def load_agent_tools(session: Session, agent_version_id: str) -> list[LoadedTool
             side_effect = (
                 bool(tool_def.get("side_effect")) or name in connector_spec.side_effect_tools
             )
-            server_def = next((d for d in _SERVER_DEFS[connector.name] if d["name"] == name), {})
             tools.append(
                 LoadedTool(
                     connector_name=connector.name,
                     name=name,
                     side_effect=side_effect,
-                    description=server_def.get("description", ""),
-                    input_schema=server_def.get("input_schema", {"type": "object"}),
+                    **_server_def(connector.name, name),
                 )
             )
 

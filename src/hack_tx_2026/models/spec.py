@@ -13,9 +13,9 @@ ACCEPTED_MODEL: Literal["gemini/gemini-3.8-flash"] = "gemini/gemini-3.8-flash"
 
 
 class _SpecSection(BaseModel):
-    """Rejects unknown keys, so a misspelled field is an error, not ignored."""
+    """Rejects unknown keys and infinite or NaN numbers, so they are errors, not ignored."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
 
 class ConnectorSpec(_SpecSection):
