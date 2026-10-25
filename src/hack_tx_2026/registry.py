@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from hack_tx_2026.admin_reads import can_read_run_log
 from hack_tx_2026.db.orm import Agent, AgentVersion, EvalReport
 from hack_tx_2026.errors import ApiError
 from hack_tx_2026.eval_runner import report_out, run_evals
@@ -125,7 +126,14 @@ def _list_item(agent: Agent, versions: list[AgentVersion]) -> AgentListItem:
     )
 
 
-def _detail(session: Session, agent: Agent) -> AgentDetail:
+def _spec_for(user: CurrentUser, agent: Agent, spec: dict[str, Any]) -> dict[str, Any]:
+    """Stories 27/65: budget is cost info, omitted unless the caller is an admin or the owner."""
+    if can_read_run_log(user, agent.owner_id):
+        return spec
+    return {k: v for k, v in spec.items() if k != "budget"}
+
+
+def _detail(session: Session, agent: Agent, user: CurrentUser) -> AgentDetail:
     versions = _versions(session, agent.id)
     return AgentDetail(
         **_list_item(agent, versions).model_dump(),
@@ -134,7 +142,7 @@ def _detail(session: Session, agent: Agent) -> AgentDetail:
                 version_number=v.version_number,
                 status=v.status,
                 created_at=v.created_at,
-                spec=v.spec,
+                spec=_spec_for(user, agent, v.spec),
             )
             for v in versions
         ],
@@ -168,7 +176,7 @@ def create_agent(session: Session, user: CurrentUser, spec_yaml: str) -> AgentDe
     require_creator(user)
     spec = _valid_spec(spec_yaml)
     agent = _insert_agent(session, user.id, spec, spec.model_dump(mode="json"))
-    return _detail(session, agent)
+    return _detail(session, agent, user)
 
 
 def add_version(session: Session, user: CurrentUser, agent_id: str, spec_yaml: str) -> AgentDetail:
@@ -190,7 +198,7 @@ def add_version(session: Session, user: CurrentUser, agent_id: str, spec_yaml: s
         )
     )
     session.commit()
-    return _detail(session, agent)
+    return _detail(session, agent, user)
 
 
 def copy_agent(
@@ -214,7 +222,7 @@ def copy_agent(
         spec_json["name"] = name
     spec = AgentSpec.model_validate(spec_json)
     agent = _insert_agent(session, user.id, spec, spec.model_dump(mode="json"))
-    return _detail(session, agent)
+    return _detail(session, agent, user)
 
 
 def _find_version(session: Session, agent: Agent, version_number: int) -> AgentVersion:
@@ -278,12 +286,12 @@ def deploy_version(
         agent.live_version_id = version.id
     session.commit()
     return DeployResponse(
-        **_detail(session, agent).model_dump(), eval_report=report_out(session, report)
+        **_detail(session, agent, user).model_dump(), eval_report=report_out(session, report)
     )
 
 
-def get_agent_detail(session: Session, agent_id: str) -> AgentDetail:
-    return _detail(session, _get_agent(session, agent_id))
+def get_agent_detail(session: Session, user: CurrentUser, agent_id: str) -> AgentDetail:
+    return _detail(session, _get_agent(session, agent_id), user)
 
 
 def _encode_cursor(slug: str) -> str:

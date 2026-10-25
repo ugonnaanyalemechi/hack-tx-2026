@@ -66,7 +66,7 @@ def list_agents(
 
 @router.get("/agents/{agent_id}")
 def get_agent(agent_id: str, session: SessionDep, user: UserDep) -> AgentDetail:
-    return registry.get_agent_detail(session, agent_id)
+    return registry.get_agent_detail(session, user, agent_id)
 
 
 @router.post("/agents/{agent_id}/versions", status_code=201)
