@@ -38,6 +38,7 @@ Where later tickets plug in:
 
 import datetime as dt
 import json
+import logging
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -78,6 +79,8 @@ from hack_tx_2026.models.events import (
     ToolResultEvent,
 )
 from hack_tx_2026.models.spec import AgentSpec
+
+logger = logging.getLogger(__name__)
 
 # Graph steps per run. One tool turn is model -> tools -> model -> respond;
 # this leaves room for a few more and stops a model that loops on tools.
@@ -466,39 +469,62 @@ def _stream_run(
     graph_input: ChatState | Command,
 ) -> Iterator[Any]:
     yield RunStartedEvent(run_id=run_id)
-    status: RunFinishedStatus = "completed"
-    error: ErrorEvent | None = None
-    paused: BudgetPausedEvent | None = None
+    # If the consumer closes the stream early (client disconnect), the run
+    # ends "failed": it never reached an outcome.
+    status: RunFinishedStatus = "failed"
+    finished = False
     try:
-        context = RunContext(
-            run_id=run_id,
-            agent_version_id=agent_version_id,
-            spec=AgentSpec.model_validate(spec),
-            tools=seams.load_agent_tools(agent_version_id),
-        )
-        graph = build_graph()
-        yield from graph.stream(
-            graph_input, _config(thread_id), context=context, stream_mode="custom"
-        )
-        if _awaits_approval(graph, thread_id):
-            status = "awaiting_approval"
-        paused = _budget_pause(graph, thread_id)
-    except ModelCallError:
-        error = ErrorEvent(code="model_error", message="The model could not answer. Try again.")
-    except GraphRecursionError:
-        error = ErrorEvent(
-            code="too_many_steps", message="The agent took too many steps to answer."
-        )
+        error: ErrorEvent | None = None
+        paused: BudgetPausedEvent | None = None
+        status = "completed"
+        try:
+            context = RunContext(
+                run_id=run_id,
+                agent_version_id=agent_version_id,
+                spec=AgentSpec.model_validate(spec),
+                tools=seams.load_agent_tools(agent_version_id),
+            )
+            graph = build_graph()
+            status = "failed"  # until the stream below runs to its end
+            yield from graph.stream(
+                graph_input, _config(thread_id), context=context, stream_mode="custom"
+            )
+            status = "awaiting_approval" if _awaits_approval(graph, thread_id) else "completed"
+            paused = _budget_pause(graph, thread_id)
+        except ModelCallError:
+            logger.warning("Model call failed in run %s", run_id, exc_info=True)
+            error = ErrorEvent(code="model_error", message="The model could not answer. Try again.")
+        except GraphRecursionError:
+            logger.warning("Run %s hit the recursion limit", run_id, exc_info=True)
+            error = ErrorEvent(
+                code="too_many_steps", message="The agent took too many steps to answer."
+            )
+        except Exception:
+            logger.exception("Run %s failed unexpectedly", run_id)
+            error = ErrorEvent(code="internal_error", message="Something went wrong. Try again.")
+        warning = _budget_warning(run_id, spec)
+        if error is not None:
+            status = "failed"
+        elif paused is not None:
+            status = "paused"
+        if warning is not None:
+            yield warning
+        if error is not None:
+            yield error
+        elif paused is not None:
+            yield paused
+        finished = True
+        _finish_quietly(run_id, thread_id, status)
+        yield RunFinishedEvent(status=status)
+    finally:
+        if not finished:
+            _finish_quietly(run_id, thread_id, status)
+
+
+def _finish_quietly(run_id: str, thread_id: str, status: RunFinishedStatus) -> None:
+    """`_finish`, but a failure to record the end of a run is logged, not raised:
+    the stream must still end with run_finished."""
+    try:
+        _finish(run_id, thread_id, status)
     except Exception:
-        error = ErrorEvent(code="internal_error", message="Something went wrong. Try again.")
-    warning = _budget_warning(run_id, spec)
-    if warning is not None:
-        yield warning
-    if error is not None:
-        status = "failed"
-        yield error
-    elif paused is not None:
-        status = "paused"
-        yield paused
-    _finish(run_id, thread_id, status)
-    yield RunFinishedEvent(status=status)
+        logger.exception("Could not record that run %s finished as %s", run_id, status)
