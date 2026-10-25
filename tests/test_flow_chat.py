@@ -437,6 +437,7 @@ def test_an_unknown_thread_is_404(client, runtime_db) -> None:
         assert r.json()["error"]["code"] == "thread_not_found"
 
 
+@pytest.mark.filterwarnings("error::sqlalchemy.exc.SAWarning")
 def test_an_agent_with_no_live_version_cannot_be_chatted_with(
     client, fake_model, runtime_db
 ) -> None:

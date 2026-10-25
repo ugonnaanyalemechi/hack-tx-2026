@@ -115,7 +115,8 @@ def read_agent_version(agent_id: str, version_number: int | None = None) -> dict
     with SessionLocal() as session:
         if version_number is None:
             agent = session.get(Agent, agent_id)
-            version = session.get(AgentVersion, agent.live_version_id) if agent else None
+            live_id = agent.live_version_id if agent else None
+            version = session.get(AgentVersion, live_id) if live_id is not None else None
             if version is None or version.agent_id != agent_id:
                 raise LookupError(f"agent {agent_id} has no live version")
         else:
