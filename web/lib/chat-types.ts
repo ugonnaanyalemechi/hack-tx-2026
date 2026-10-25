@@ -78,6 +78,9 @@ export type ChatMessage =
       /** Set on a re-check answer: the id of the flagged message it follows. */
       // RUNTIME-PLACEHOLDER(#30): the real re-check is a recheck run linked to the ticket (recheck_run_id), not to a chat message. Replace this link once #30 and the thread read (#15) define how a re-check message is stored.
       recheckOf?: string;
+      /** Set when the run stopped because the agent hit its budget. The
+       * saved message stays; Continue resumes it. */
+      paused?: boolean;
       /** Set when the run ended in error instead of a completed message. */
       error?: { code: string; message: string };
       status: "streaming" | "done" | "error";

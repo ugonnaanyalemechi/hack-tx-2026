@@ -1,5 +1,5 @@
 /**
- * The Nocturne nav pill (docs/design-system.md §6, Navigation bar): a pill
+ * The Foundry nav pill (docs/design-system.md §6, Navigation bar): a pill
  * container holding pill items, one of them active. Used for the top nav
  * tabs, the role switcher and section tabs such as the admin sub-nav.
  */
@@ -21,7 +21,7 @@ export function PillGroup({ className, ...props }: ComponentProps<"div">) {
 }
 
 const itemClass =
-  "inline-flex h-9 items-center rounded-pill px-4 text-sm font-medium text-text-secondary transition-colors duration-160 ease-nocturne outline-none hover:bg-white/5 hover:text-text-primary focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas aria-[current=page]:bg-white/10 aria-[current=page]:text-text-primary aria-pressed:bg-white/10 aria-pressed:text-text-primary disabled:pointer-events-none disabled:text-text-disabled";
+  "inline-flex h-9 items-center rounded-pill px-4 text-sm font-medium text-text-secondary transition-colors duration-160 ease-foundry outline-none hover:bg-white/5 hover:text-text-primary focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas aria-[current=page]:bg-white/10 aria-[current=page]:text-text-primary aria-pressed:bg-white/10 aria-pressed:text-text-primary disabled:pointer-events-none disabled:text-text-disabled";
 
 export function PillLink({
   href,

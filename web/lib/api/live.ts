@@ -32,7 +32,7 @@ export function createLiveClient(options: LiveClientOptions): ApiClient {
     method: "GET" | "POST",
     path: string,
     query: Query = {},
-    json?: unknown
+    body?: unknown
   ): Promise<T> {
     const search = new URLSearchParams();
     for (const [key, value] of Object.entries(query)) {
@@ -44,15 +44,15 @@ export function createLiveClient(options: LiveClientOptions): ApiClient {
     const url = `${baseUrl}${path}${qs ? `?${qs}` : ""}`;
     const headers: Record<string, string> = { Accept: "application/json" };
     if (userId) headers[identityHeaderName] = userId;
-    if (json !== undefined) headers["Content-Type"] = "application/json";
+    if (body !== undefined) headers["Content-Type"] = "application/json";
 
     let response: Response;
     try {
       response = await fetch(url, {
         method,
         headers,
-        body: json === undefined ? undefined : JSON.stringify(json),
         cache: "no-store",
+        body: body === undefined ? undefined : JSON.stringify(body),
       });
     } catch {
       throw new ApiError(0, {
@@ -61,19 +61,19 @@ export function createLiveClient(options: LiveClientOptions): ApiClient {
       });
     }
 
-    const body: unknown = await response.json().catch(() => null);
+    const payload: unknown = await response.json().catch(() => null);
     if (!response.ok) {
-      if (isErrorResponse(body)) throw new ApiError(response.status, body.error);
+      if (isErrorResponse(payload)) throw new ApiError(response.status, payload.error);
       throw new ApiError(response.status, {
         code: "http_error",
         message: `Request failed with status ${response.status}.`,
       });
     }
-    return body as T;
+    return payload as T;
   }
 
   const get = <T>(path: string, query: Query = {}) => request<T>("GET", path, query);
-  const post = <T>(path: string, json: unknown = {}) => request<T>("POST", path, {}, json);
+  const post = <T>(path: string, body?: unknown) => request<T>("POST", path, {}, body ?? {});
 
   return {
     listUsers: () => get("/v1/users"),
@@ -93,5 +93,13 @@ export function createLiveClient(options: LiveClientOptions): ApiClient {
     resolveTicket: (ticketId) => post(`/v1/tickets/${encodeURIComponent(ticketId)}/resolve`),
     saveTicketAsTestCase: (ticketId, body) =>
       post(`/v1/tickets/${encodeURIComponent(ticketId)}/save-as-test-case`, body),
+    getBudget: (agentId) => get(`/v1/agents/${encodeURIComponent(agentId)}/budget`),
+    approveSpend: (agentId, amount) =>
+      post(
+        `/v1/agents/${encodeURIComponent(agentId)}/budget/approve`,
+        amount ? { amount } : undefined
+      ),
+    listBudgets: () => get("/v1/admin/budgets"),
+    getAdminQueue: () => get("/v1/admin/queue"),
   };
 }

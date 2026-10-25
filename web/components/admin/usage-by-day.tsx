@@ -51,7 +51,7 @@ export function UsageByDay({ rows }: { rows: DayUsage[] }) {
               className="group relative flex h-full flex-1 items-end justify-center rounded-xs outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
             >
               <div
-                className={`w-full max-w-6 rounded-t-xs bg-primary-500 transition-colors duration-160 ease-nocturne group-hover:bg-primary-400 group-focus-visible:bg-primary-400 ${
+                className={`w-full max-w-6 rounded-t-xs bg-primary-500 transition-colors duration-160 ease-foundry group-hover:bg-primary-400 group-focus-visible:bg-primary-400 ${
                   value > 0 ? "min-h-0.5" : ""
                 }`}
                 style={{ height: `${height}%` }}
