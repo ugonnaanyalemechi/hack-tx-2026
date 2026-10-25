@@ -114,7 +114,4 @@ def main(argv: list[str] | None = None) -> None:
             print(f"Version {response.live_version_number} is LIVE.")
         else:
             print("Version 1 was BLOCKED by the eval gate.")
-            print(
-                "Real-runtime evals need owner:runtime's run_agent (ticket #26). "
-                "An admin can override a blocked deploy with a reason."
-            )
+            print("An admin can override a blocked deploy with a reason.")

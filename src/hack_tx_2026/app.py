@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from hack_tx_2026.checkpointer import close_checkpointer, get_checkpointer
 from hack_tx_2026.db.base import SessionLocal
 from hack_tx_2026.errors import register_error_handlers
 from hack_tx_2026.routers import platform, runtime
@@ -13,7 +14,11 @@ from hack_tx_2026.seed import seed_users
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     with SessionLocal() as session:
         seed_users(session)
-    yield
+    get_checkpointer()
+    try:
+        yield
+    finally:
+        close_checkpointer()
 
 
 def create_app() -> FastAPI:
