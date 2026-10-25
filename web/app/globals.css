@@ -1,26 +1,202 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
+/*
+ * Nocturne design system tokens, mapped into Tailwind v4's @theme so every
+ * component can use real utility classes (bg-surface-1, text-text-secondary,
+ * rounded-pill, shadow-e2, ...) instead of inline styles or magic hex/px
+ * values. See docs/design-system.md for the source of truth. This is a
+ * fixed dark-only product (no light theme), so these values are the only
+ * palette the app has.
+ */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Typography: Geist / Geist Mono, self-hosted via next/font in layout.tsx */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo,
+    monospace;
+
+  /* type.overline: Geist Mono, uppercase, above section titles / table
+   * headers (docs/design-system.md §3). Not on the default Tailwind type
+   * scale, so it gets its own named token instead of a one-off text-[11px]. */
+  --text-overline: 11px;
+  --text-overline--line-height: 1.2;
+  --tracking-overline: 0.08em;
+
+  /* Type scale (docs/design-system.md §3). H1 steps down to 32px below
+   * 768px, so it has a mobile size too: `text-h1-sm md:text-h1`. */
+  --text-h1: 44px;
+  --text-h1--line-height: 1.1;
+  --text-h1--letter-spacing: -0.025em;
+  --text-h1--font-weight: 600;
+  --text-h1-sm: 32px;
+  --text-h1-sm--line-height: 1.1;
+  --text-h1-sm--letter-spacing: -0.025em;
+  --text-h1-sm--font-weight: 600;
+  --text-h3: 24px;
+  --text-h3--line-height: 1.25;
+  --text-h3--letter-spacing: -0.015em;
+  --text-h3--font-weight: 600;
+  --text-h4: 18px;
+  --text-h4--line-height: 1.35;
+  --text-h4--letter-spacing: -0.01em;
+  --text-h4--font-weight: 600;
+  --text-stat: 32px;
+  --text-stat--line-height: 1;
+  --text-stat--letter-spacing: -0.02em;
+  --text-stat--font-weight: 500;
+  --text-body-l: 18px;
+  --text-body-l--line-height: 1.55;
+  --text-body-l--letter-spacing: -0.005em;
+
+  /* Motion (§6): every transition is 160ms on this curve. */
+  --ease-nocturne: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* Containers (§4): max-w-wide for nav and full-bleed rows, max-w-content
+   * for page content, max-w-measure for body copy. */
+  --container-wide: 1360px;
+  --container-content: 1200px;
+  --container-measure: 560px;
+
+  /* Radius: pills act, rectangles hold (P3) */
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 28px;
+  --radius-pill: 999px;
+
+  /* Elevation */
+  --shadow-e1: inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-e2: inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 8px 24px -8px rgba(0, 0, 0, 0.6);
+
+  /* Brand: cobalt, platinum, aurora */
+  --color-primary-300: #8c98ff;
+  --color-primary-400: #6474fa;
+  --color-primary-500: #4255f5;
+  --color-primary-600: #2f3fd6;
+  --color-primary-700: #1e2690;
+
+  --color-secondary-100: #eceef3;
+  --color-secondary-200: #dadde6;
+  --color-secondary-300: #c7cbd6;
+  --color-secondary-400: #9aa0b2;
+  --color-secondary-500: #6e7488;
+
+  --color-accent-200: #ddd3fe;
+  --color-accent-300: #c4b2fc;
+  --color-accent-400: #a78bfa;
+  --color-accent-500: #8b67f0;
+  --color-accent-600: #6d48d4;
+
+  /* Neutral scale */
+  --color-neutral-50: #f5f6fa;
+  --color-neutral-100: #e8eaf2;
+  --color-neutral-200: #cdd1e0;
+  --color-neutral-300: #a9aec4;
+  --color-neutral-400: #7f85a0;
+  --color-neutral-500: #5c627d;
+  --color-neutral-600: #424760;
+  --color-neutral-700: #2d3148;
+  --color-neutral-800: #1a1d2e;
+  --color-neutral-900: #0e1020;
+  --color-neutral-950: #07080f;
+
+  /* Background & surfaces */
+  --color-canvas: #07080f;
+  --color-surface-1: #0e1020;
+  --color-surface-2: #1a1d2e;
+  --color-surface-glass: rgba(255, 255, 255, 0.04);
+  --color-surface-overlay: rgba(18, 20, 42, 0.85);
+  --color-surface-scrim: rgba(5, 6, 11, 0.72);
+
+  /* Text */
+  --color-text-primary: #f5f6fa;
+  --color-text-secondary: #a9aec4;
+  --color-text-muted: #7f85a0;
+  --color-text-disabled: #5c627d;
+  --color-text-brand: #8c98ff;
+  --color-text-inverse: #07080f;
+
+  /* Borders */
+  --color-border-subtle: rgba(255, 255, 255, 0.08);
+  --color-border-default: rgba(255, 255, 255, 0.12);
+  --color-border-strong: rgba(255, 255, 255, 0.2);
+  --color-border-focus: #6474fa;
+
+  /* Semantic */
+  --color-success: #3dd68c;
+  --color-warning: #f5b544;
+  --color-error: #f26d6d;
+  --color-info: #5aa9f5;
+
+  /* shadcn/ui semantic aliases, mapped onto the Nocturne palette above so
+   * every installed primitive (Button, Input, Badge, Avatar, ...) renders
+   * in-theme with zero per-component overrides. */
+  --color-background: var(--color-canvas);
+  --color-foreground: var(--color-text-primary);
+  --color-card: var(--color-surface-1);
+  --color-card-foreground: var(--color-text-primary);
+  --color-popover: var(--color-surface-2);
+  --color-popover-foreground: var(--color-text-primary);
+  --color-primary: var(--color-neutral-50);
+  --color-primary-foreground: var(--color-text-inverse);
+  --color-secondary: var(--color-surface-2);
+  --color-secondary-foreground: var(--color-text-primary);
+  --color-muted: var(--color-surface-2);
+  --color-muted-foreground: var(--color-text-muted);
+  --color-accent: var(--color-surface-2);
+  --color-accent-foreground: var(--color-text-primary);
+  --color-destructive: var(--color-error);
+  --color-border: var(--color-border-default);
+  --color-input: var(--color-border-default);
+  --color-ring: var(--color-border-focus);
+
+  --color-sidebar: var(--color-surface-1);
+  --color-sidebar-foreground: var(--color-text-primary);
+  --color-sidebar-primary: var(--color-neutral-50);
+  --color-sidebar-primary-foreground: var(--color-text-inverse);
+  --color-sidebar-accent: var(--color-surface-2);
+  --color-sidebar-accent-foreground: var(--color-text-primary);
+  --color-sidebar-border: var(--color-border-default);
+  --color-sidebar-ring: var(--color-border-focus);
+
+  --color-chart-1: var(--color-primary-400);
+  --color-chart-2: var(--color-secondary-300);
+  --color-chart-3: var(--color-accent-400);
+  --color-chart-4: var(--color-success);
+  --color-chart-5: var(--color-info);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* gradient.glow (§5): the single cobalt light behind a view's hero. One
+ * per view. */
+@utility bg-glow {
+  background-image: radial-gradient(
+    60% 55% at 65% 40%,
+    rgba(66, 85, 245, 0.55),
+    rgba(66, 85, 245, 0) 70%
+  );
+}
+
+/* gradient.cobalt (§5): brand objects such as the logo tile. */
+@utility bg-cobalt {
+  background-image: linear-gradient(135deg, #5468f5 0%, #2f3fd6 55%, #1e2690 100%);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
   }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
 }

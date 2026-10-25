@@ -10,9 +10,12 @@ requires-python = ">=3.13"
 dependencies = [
     "alembic>=1.20.1",
     "fastapi>=0.162.0",
+    "litellm>=1.106.4",
+    "mcp>=2.3.0",
     "psycopg[binary]>=3.3.6",
     "pydantic>=2",
     "pydantic-settings>=2.16.1",
+    "pyyaml>=6.0.3",
     "sqlalchemy>=2",
     "uvicorn[standard]>=0.54.0",
 ]
@@ -20,6 +23,7 @@ dependencies = [
 [project.scripts]
 hack-tx-2026 = "hack_tx_2026:main"
 check = "hack_tx_2026.check:main"
+seed = "hack_tx_2026.seed:main"
 
 [build-system]
 requires = ["uv_build>=0.13.5,<0.14.0"]
@@ -32,6 +36,7 @@ dev = [
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "ruff>=0.17.2",
+    "types-pyyaml>=6.0.12.20260906",
 ]
 
 [tool.ruff]
