@@ -10,7 +10,8 @@
 
 import { ApiError } from "./api/client";
 import { mockBudgetState, mockPauseAtCap } from "./api/mock-budgets";
-import { MOCK_AGENTS } from "./api/mock-data";
+import { MOCK_AGENTS, MOCK_USERS } from "./api/mock-data";
+import { mockFileFlagTicket } from "./api/mock-tickets";
 import type { StreamEvent } from "./contracts/events";
 import type { Agent, ApprovalDecision, ChatSummary } from "./chat-types";
 
@@ -353,6 +354,8 @@ export interface FlagOptions extends StreamOptions {
   /** Fail the first flag call for each answer, to exercise the error state;
    * the retry then goes through. */
   failFirstAttempt?: boolean;
+  /** Who flagged which answer; the mock backend files a ticket from it. */
+  ticket?: { agentId: string; answer: string; userId: string };
 }
 
 /**
@@ -362,7 +365,7 @@ export interface FlagOptions extends StreamOptions {
  * is the immediate re-check run: run_started -> tool_call -> tool_result ->
  * tokens -> message_complete -> run_finished(completed).
  */
-// RUNTIME-PLACEHOLDER(#30): fakes the flag call (POST that files a ticket and streams the re-check). Replace with the live flag call in web/lib/api/live.ts; it should also create the ticket, which this mock does not.
+// RUNTIME-PLACEHOLDER(#30): fakes the flag call (POST that files a ticket and streams the re-check). Replace with the live flag call behind `flagAnswer` in web/lib/api/runtime-seams.ts; the mock files the ticket itself (mock-tickets.ts), the real flag route must too.
 export async function mockFlagAnswer(
   flaggedMessageId: string,
   userText: string,
@@ -376,16 +379,31 @@ export async function mockFlagAnswer(
     failedFlags.add(flaggedMessageId);
     throw new Error("network_error");
   }
-  return recheckStream(userText, delay);
+  const recheckRunId = `run_recheck_${nextId("r")}`;
+  if (opts.ticket) {
+    const agent = MOCK_AGENTS.find((a) => a.id === opts.ticket?.agentId);
+    mockFileFlagTicket({
+      agentId: opts.ticket.agentId,
+      agentName: agent?.name ?? MOCK_AGENT.name,
+      question: userText,
+      answer: opts.ticket.answer,
+      userId: opts.ticket.userId,
+      userName: MOCK_USERS.find((u) => u.id === opts.ticket?.userId)?.name ?? null,
+      runId: `run_flagged_${flaggedMessageId}`,
+      recheckRunId,
+    });
+  }
+  return recheckStream(userText, delay, recheckRunId);
 }
 
 // RUNTIME-PLACEHOLDER(#30): scripted re-check events (canned answer built from the question). Replace with the SSE stream of the real re-check run.
 async function* recheckStream(
   userText: string,
-  delay: (ms: number) => Promise<void>
+  delay: (ms: number) => Promise<void>,
+  runId: string
 ): AsyncGenerator<StreamEvent> {
   const answer = pickAnswer(userText);
-  yield { type: "run_started", run_id: nextId("run") };
+  yield { type: "run_started", run_id: runId };
   await delay(120);
 
   yield { type: "tool_call", name: "search_filings", input: { query: userText } };

@@ -95,3 +95,79 @@ export function seedMockTickets(): TicketDetail[] {
 }
 
 export const MOCK_TICKETS: TicketDetail[] = seedMockTickets();
+
+// ---------------------------------------------------------------------------
+// Tickets filed by flagging an answer in the mock chat.
+//
+// RUNTIME-PLACEHOLDER(#30): the real flag call (runtime #30) files the ticket
+// through platform's ticket service. Until then the mock flag files it here,
+// kept in localStorage so /admin/tickets sees it after navigating or reloading.
+// ---------------------------------------------------------------------------
+
+const FILED_KEY = "foundry.mock-flag-tickets";
+let filed: TicketDetail[] = [];
+let filedRaw: string | null = null;
+
+function loadFiled(): TicketDetail[] {
+  try {
+    const raw = window.localStorage.getItem(FILED_KEY);
+    if (raw !== null && raw !== filedRaw) {
+      filedRaw = raw;
+      filed = JSON.parse(raw) as TicketDetail[];
+    }
+  } catch {
+    // Blocked storage or a corrupt value: keep the in-memory copy.
+  }
+  return filed;
+}
+
+/** Call after changing a filed ticket in place (for example resolving it). */
+export function persistFiledTickets() {
+  try {
+    const raw = JSON.stringify(filed);
+    filedRaw = raw;
+    window.localStorage.setItem(FILED_KEY, raw);
+  } catch {
+    // Blocked storage: this page still sees the change.
+  }
+}
+
+/** Every ticket the mock knows, newest first: flagged this session, then the seeds. */
+export function allMockTickets(): TicketDetail[] {
+  return [...loadFiled(), ...MOCK_TICKETS];
+}
+
+let filedCounter = 0;
+
+/** Files a ticket for a flagged answer; the re-check run is attached at once. */
+export function mockFileFlagTicket(input: {
+  agentId: string;
+  agentName: string;
+  question: string;
+  answer: string;
+  userId: string;
+  userName: string | null;
+  runId: string;
+  recheckRunId: string;
+}): TicketDetail {
+  filedCounter += 1;
+  const stamp = `${Date.now().toString(16)}${filedCounter}`.padStart(32, "0");
+  const created: TicketDetail = {
+    id: `tkt_${stamp}`,
+    agent_id: input.agentId,
+    agent_name: input.agentName,
+    run_id: input.runId,
+    recheck_run_id: input.recheckRunId,
+    question: input.question,
+    answer: input.answer,
+    note: null,
+    status: "open",
+    created_by: input.userId,
+    created_by_name: input.userName,
+    created_at: new Date().toISOString(),
+    resolved_at: null,
+  };
+  filed = [created, ...loadFiled()];
+  persistFiledTickets();
+  return created;
+}
