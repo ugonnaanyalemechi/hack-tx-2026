@@ -13,7 +13,7 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from hack_tx_2026 import agent_runtime, seams
-from hack_tx_2026.admin_reads import _b64, _unb64, _utc
+from hack_tx_2026.cursors import b64, decode_stamp_cursor, utc
 from hack_tx_2026.db.orm import Agent, AgentVersion, Approval, Run, Thread, Ticket
 from hack_tx_2026.errors import ApiError
 from hack_tx_2026.identity import CurrentUser
@@ -28,8 +28,8 @@ def _thread_out(thread: Thread) -> ThreadOut:
         id=thread.id,
         agent_id=thread.agent_id,
         title=thread.title,
-        created_at=_utc(thread.created_at),
-        last_updated_at=_utc(thread.last_updated_at),
+        created_at=utc(thread.created_at),
+        last_updated_at=utc(thread.last_updated_at),
     )
 
 
@@ -48,14 +48,6 @@ def create_thread(session: Session, user: CurrentUser, agent_id: str) -> ThreadO
     return _thread_out(thread)
 
 
-def _cursor(cursor: str) -> tuple[dt.datetime, str]:
-    try:
-        stamp, thread_id = _unb64(cursor).split("|", 1)
-        return _utc(dt.datetime.fromisoformat(stamp)), thread_id
-    except ValueError:
-        raise ApiError(422, "invalid_cursor", "Cursor is not valid") from None
-
-
 def list_threads(
     session: Session, user: CurrentUser, agent_id: str, limit: int, cursor: str | None
 ) -> Page[ThreadOut]:
@@ -68,7 +60,7 @@ def list_threads(
         .limit(limit + 1)
     )
     if cursor:
-        stamp, thread_id = _cursor(cursor)
+        stamp, thread_id = decode_stamp_cursor(cursor)
         stmt = stmt.where(
             or_(
                 Thread.last_updated_at < stamp,
@@ -80,7 +72,7 @@ def list_threads(
     next_cursor = None
     if len(rows) > limit:
         last = page[-1]
-        next_cursor = _b64(f"{_utc(last.last_updated_at).isoformat()}|{last.id}")
+        next_cursor = b64(f"{utc(last.last_updated_at).isoformat()}|{last.id}")
     return Page[ThreadOut](items=[_thread_out(t) for t in page], next_cursor=next_cursor)
 
 

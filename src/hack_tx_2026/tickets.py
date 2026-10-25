@@ -7,13 +7,8 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from hack_tx_2026 import eval_cases
-from hack_tx_2026.admin_reads import (
-    _b64,
-    _db_dt,
-    _decode_run_cursor,
-    _scope_agent_ids,
-    _utc,
-)
+from hack_tx_2026.admin_reads import _scope_agent_ids
+from hack_tx_2026.cursors import b64, db_dt, decode_stamp_cursor, utc
 from hack_tx_2026.db.orm import Agent, EvalCase, Run, Ticket, User
 from hack_tx_2026.errors import ApiError
 from hack_tx_2026.identity import CurrentUser
@@ -56,8 +51,8 @@ def _item_fields(ticket: Ticket, agent: Agent) -> dict:
         "question": ticket.question,
         "status": ticket.status,
         "created_by": ticket.created_by,
-        "created_at": _utc(ticket.created_at),
-        "resolved_at": _utc(ticket.resolved_at) if ticket.resolved_at else None,
+        "created_at": utc(ticket.created_at),
+        "resolved_at": utc(ticket.resolved_at) if ticket.resolved_at else None,
     }
 
 
@@ -117,8 +112,8 @@ def list_tickets(
     if status is not None:
         stmt = stmt.where(Ticket.status == status)
     if cursor:
-        stamp, ticket_id = _decode_run_cursor(cursor)
-        stamp_db = _db_dt(stamp)
+        stamp, ticket_id = decode_stamp_cursor(cursor)
+        stamp_db = db_dt(stamp)
         stmt = stmt.where(
             or_(
                 Ticket.created_at < stamp_db,
@@ -131,7 +126,7 @@ def list_tickets(
     next_cursor = None
     if len(rows) > limit:
         last = page_rows[-1][0]
-        next_cursor = _b64(f"{_utc(last.created_at).isoformat()}|{last.id}")
+        next_cursor = b64(f"{utc(last.created_at).isoformat()}|{last.id}")
     return Page[TicketListItem](items=items, next_cursor=next_cursor)
 
 
@@ -179,7 +174,7 @@ def open_ticket_items(session: Session) -> list[OpenTicketItem]:
             agent_id=a.id,
             agent_name=a.name,
             question=_snippet(t.question),
-            since=_utc(t.created_at),
+            since=utc(t.created_at),
         )
         for t, a in session.execute(stmt).all()
     ]

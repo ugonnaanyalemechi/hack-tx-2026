@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from hack_tx_2026 import fake_mcp
-from hack_tx_2026.admin_reads import _b64, _unb64
+from hack_tx_2026.cursors import b64, unb64
 from hack_tx_2026.db.orm import Agent, AgentVersion, Connector, ConnectorGrant
 from hack_tx_2026.demo import filings
 from hack_tx_2026.errors import ApiError
@@ -109,7 +109,7 @@ def list_connectors(session: Session, limit: int, cursor: str | None) -> Page[Co
     """Connectors ordered by name, paged with a name cursor."""
     stmt = select(Connector).order_by(Connector.name).limit(limit + 1)
     if cursor:
-        stmt = stmt.where(Connector.name > _unb64(cursor))
+        stmt = stmt.where(Connector.name > unb64(cursor))
     rows = list(session.scalars(stmt))
     page = rows[:limit]
     items = [
@@ -128,7 +128,7 @@ def list_connectors(session: Session, limit: int, cursor: str | None) -> Page[Co
         )
         for c in page
     ]
-    next_cursor = _b64(page[-1].name) if len(rows) > limit else None
+    next_cursor = b64(page[-1].name) if len(rows) > limit else None
     return Page[ConnectorOut](items=items, next_cursor=next_cursor)
 
 
@@ -141,11 +141,11 @@ def list_active_grants(session: Session, limit: int, cursor: str | None) -> Page
         .limit(limit + 1)
     )
     if cursor:
-        stmt = stmt.where(ConnectorGrant.id > _unb64(cursor))
+        stmt = stmt.where(ConnectorGrant.id > unb64(cursor))
     rows = list(session.scalars(stmt))
     page = rows[:limit]
     items = [GrantOut.model_validate(g, from_attributes=True) for g in page]
-    next_cursor = _b64(page[-1].id) if len(rows) > limit else None
+    next_cursor = b64(page[-1].id) if len(rows) > limit else None
     return Page[GrantOut](items=items, next_cursor=next_cursor)
 
 

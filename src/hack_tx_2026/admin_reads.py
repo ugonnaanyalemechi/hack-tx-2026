@@ -1,6 +1,5 @@
 """Admin reads: catalog, run log, run detail and usage (story 66 access rule)."""
 
-import base64
 import datetime as dt
 from collections import defaultdict
 from decimal import Decimal
@@ -9,6 +8,7 @@ from typing import Any
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
+from hack_tx_2026.cursors import b64, db_dt, decode_stamp_cursor, unb64, utc
 from hack_tx_2026.db.orm import Agent, AgentVersion, Approval, Run, RunStep, User
 from hack_tx_2026.errors import ApiError
 from hack_tx_2026.identity import CurrentUser
@@ -42,23 +42,6 @@ def _get_agent(session: Session, agent_id: str) -> Agent:
     return agent
 
 
-def _utc(value: dt.datetime) -> dt.datetime:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=dt.UTC)
-    return value.astimezone(dt.UTC)
-
-
-def _b64(text: str) -> str:
-    return base64.urlsafe_b64encode(text.encode()).decode()
-
-
-def _unb64(cursor: str) -> str:
-    try:
-        return base64.b64decode(cursor.encode(), altchars=b"-_", validate=True).decode()
-    except ValueError:
-        raise ApiError(422, "invalid_cursor", "Cursor is not valid") from None
-
-
 # --- catalog ----------------------------------------------------------------
 
 
@@ -70,7 +53,7 @@ def list_catalog(session: Session, limit: int, cursor: str | None) -> Page[Catal
         .limit(limit + 1)
     )
     if cursor:
-        stmt = stmt.where(Agent.slug > _unb64(cursor))
+        stmt = stmt.where(Agent.slug > unb64(cursor))
     rows = list(session.execute(stmt).all())
     page_rows = rows[:limit]
     items = [
@@ -84,7 +67,7 @@ def list_catalog(session: Session, limit: int, cursor: str | None) -> Page[Catal
         )
         for a, number in page_rows
     ]
-    next_cursor = _b64(page_rows[-1][0].slug) if len(rows) > limit else None
+    next_cursor = b64(page_rows[-1][0].slug) if len(rows) > limit else None
     return Page[CatalogItem](items=items, next_cursor=next_cursor)
 
 
@@ -95,7 +78,7 @@ def _run_item(user: CurrentUser, run: Run, owner_id: str) -> RunListItem | RunLi
     duration = (
         None
         if run.finished_at is None
-        else int((_utc(run.finished_at) - _utc(run.created_at)).total_seconds() * 1000)
+        else int((utc(run.finished_at) - utc(run.created_at)).total_seconds() * 1000)
     )
     common: dict[str, Any] = {
         "id": run.id,
@@ -104,26 +87,11 @@ def _run_item(user: CurrentUser, run: Run, owner_id: str) -> RunListItem | RunLi
         "entry_point": run.entry_point,
         "status": run.status,
         "duration_ms": duration,
-        "created_at": _utc(run.created_at),
+        "created_at": utc(run.created_at),
     }
     if can_read_run_log(user, owner_id):
         return RunListItem(**common, cost_total=run.cost_total)
     return RunListItemPublic(**common)
-
-
-def _decode_run_cursor(cursor: str) -> tuple[dt.datetime, str]:
-    try:
-        stamp, run_id = _unb64(cursor).split("|", 1)
-        return _utc(dt.datetime.fromisoformat(stamp)), run_id
-    except ValueError:
-        raise ApiError(422, "invalid_cursor", "Cursor is not valid") from None
-
-
-def _db_dt(value: dt.datetime) -> dt.datetime:
-    """Match the column's timezone-awareness for comparisons."""
-    if Run.__table__.c.created_at.type.timezone:  # type: ignore[attr-defined]
-        return value
-    return value.replace(tzinfo=None)
 
 
 def _scope_agent_ids(session: Session, user: CurrentUser, agent_id: str | None) -> list[str] | None:
@@ -157,8 +125,8 @@ def list_runs(
     if scope is not None:
         stmt = stmt.where(Run.agent_id.in_(scope))
     if cursor:
-        stamp, run_id = _decode_run_cursor(cursor)
-        stamp_db = _db_dt(stamp)
+        stamp, run_id = decode_stamp_cursor(cursor)
+        stamp_db = db_dt(stamp)
         stmt = stmt.where(
             or_(Run.created_at < stamp_db, and_(Run.created_at == stamp_db, Run.id < run_id))
         )
@@ -168,7 +136,7 @@ def list_runs(
     next_cursor = None
     if len(rows) > limit:
         last = page_rows[-1][0]
-        next_cursor = _b64(f"{_utc(last.created_at).isoformat()}|{last.id}")
+        next_cursor = b64(f"{utc(last.created_at).isoformat()}|{last.id}")
     return Page[RunListItem | RunListItemPublic](items=items, next_cursor=next_cursor)
 
 
@@ -198,7 +166,7 @@ def _approval_for_steps(
             status=a.status,
             decided_by=a.decided_by,
             decided_by_name=names.get(a.decided_by) if a.decided_by else None,
-            decided_at=_utc(a.decided_at) if a.decided_at else None,
+            decided_at=utc(a.decided_at) if a.decided_at else None,
         )
 
     result: dict[str, ApprovalDecision] = {}
@@ -278,7 +246,7 @@ def get_usage(session: Session, user: CurrentUser, agent_id: str | None) -> Usag
         agent_names[run.agent_id] = name
         agent_runs[run.agent_id] += 1
         agent_cost[run.agent_id] += run.cost_total
-        day = _utc(run.created_at).date()
+        day = utc(run.created_at).date()
         day_runs[day] += 1
         day_cost[day] += run.cost_total
     by_agent = [
