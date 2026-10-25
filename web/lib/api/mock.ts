@@ -34,6 +34,11 @@ import {
   mockGetAgentDetail,
   mockListEvalReports,
 } from "@/lib/api/mock-deploy";
+import {
+  mockDecideConnectorRequest,
+  mockListConnectorGrants,
+  mockListConnectorRequests,
+} from "@/lib/api/mock-connectors";
 import { mockApproveSpend, mockGetBudget, mockListBudgets } from "@/lib/api/mock-budgets";
 import {
   MOCK_AGENTS,
@@ -43,7 +48,8 @@ import {
   type MockRun,
 } from "@/lib/api/mock-data";
 
-export type MockScenario = "loading" | "empty" | "error" | null;
+/** "decide-error" fails only connector request decisions (to show the optimistic rollback). */
+export type MockScenario = "loading" | "empty" | "error" | "decide-error" | null;
 
 export interface MockClientOptions {
   userId: string | null;
@@ -394,6 +400,41 @@ export function createMockClient(options: MockClientOptions): ApiClient {
           }))
           .reverse();
         return { items: [...pauses, ...mockBlockedDeploys(), ...tickets] };
+      }),
+
+    // RUNTIME-PLACEHOLDER(#56): fixtures; live will be GET /v1/admin/connector-requests.
+    listConnectorRequests: () =>
+      respond(() => {
+        requireAdmin(caller());
+        return isEmpty() ? [] : mockListConnectorRequests();
+      }),
+
+    // RUNTIME-PLACEHOLDER(#56): fixtures; live will be POST /v1/admin/connector-requests/{id}/decision.
+    decideConnectorRequest: (requestId, decision) =>
+      respond(() => {
+        const admin = caller();
+        requireAdmin(admin);
+        if (getScenario() === "decide-error") {
+          throw new ApiError(500, {
+            code: "internal_error",
+            message: "The server hit an error. Try again in a moment.",
+          });
+        }
+        const result = mockDecideConnectorRequest(requestId, decision, admin.name);
+        if (!result) {
+          throw new ApiError(404, {
+            code: "connector_request_not_found",
+            message: "Connector request not found",
+          });
+        }
+        return result;
+      }),
+
+    // RUNTIME-PLACEHOLDER(#56): fixtures; live will be GET /v1/admin/connector-grants.
+    listConnectorGrants: () =>
+      respond(() => {
+        requireAdmin(caller());
+        return isEmpty() ? [] : mockListConnectorGrants();
       }),
   };
 }

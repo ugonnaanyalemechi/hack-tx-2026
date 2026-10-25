@@ -24,6 +24,12 @@ import type {
   UsageReport,
   UserPublic,
 } from "@/lib/contracts/api";
+import type {
+  ConnectorDecision,
+  ConnectorGrantRow,
+  ConnectorRequest,
+  DecideConnectorResult,
+} from "@/lib/contracts/connectors";
 import type { DeployResponse, EvalReportOut } from "@/lib/contracts/evals";
 import type { AgentDetail } from "@/lib/contracts/registry";
 import type {
@@ -94,6 +100,29 @@ export interface ApiClient {
   listBudgets(): Promise<BudgetList>;
   /** `GET /v1/admin/queue`: what needs an admin (paused budgets, blocked deploys, tickets). */
   getAdminQueue(): Promise<AdminQueue>;
+  /**
+   * Pending connector requests, oldest first, admin only.
+   * RUNTIME-PLACEHOLDER(#56): no request route exists. Intended
+   * `GET /v1/admin/connector-requests`; live throws `RuntimeNotAvailableError`.
+   */
+  listConnectorRequests(): Promise<ConnectorRequest[]>;
+  /**
+   * Approve or deny a request, admin only. Approving creates the grant (the
+   * grant itself already exists as `POST /v1/connectors/{connector_id}/grants`).
+   * RUNTIME-PLACEHOLDER(#56): intended `POST /v1/admin/connector-requests/{id}/decision`
+   * with `{ decision, reason }`; live throws `RuntimeNotAvailableError`.
+   */
+  decideConnectorRequest(
+    requestId: string,
+    decision: ConnectorDecision,
+    reason?: string | null
+  ): Promise<DecideConnectorResult>;
+  /**
+   * Active grants (connector x agent) with tool names and side-effect flags.
+   * RUNTIME-PLACEHOLDER(#56): `GET /v1/connectors` lists tools but nothing
+   * lists grants. Intended `GET /v1/admin/connector-grants`; live throws.
+   */
+  listConnectorGrants(): Promise<ConnectorGrantRow[]>;
 }
 
 /** An `ErrorResponse` from the API (or a network failure, status 0). */

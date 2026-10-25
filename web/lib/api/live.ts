@@ -2,6 +2,7 @@
 
 import type { ErrorResponse, PageParams } from "@/lib/contracts/api";
 import { ApiError, type ApiClient } from "@/lib/api/client";
+import { RuntimeNotAvailableError } from "@/lib/api/runtime-seams";
 import type { EvalReportOut } from "@/lib/contracts/evals";
 
 export interface LiveClientOptions {
@@ -117,5 +118,16 @@ export function createLiveClient(options: LiveClientOptions): ApiClient {
       ),
     listBudgets: () => get("/v1/admin/budgets"),
     getAdminQueue: () => get("/v1/admin/queue"),
+    // RUNTIME-PLACEHOLDER(#56): replace with GET /v1/admin/connector-requests once platform builds it.
+    listConnectorRequests: () =>
+      Promise.reject(new RuntimeNotAvailableError("Connector requests aren't available yet", 56)),
+    // RUNTIME-PLACEHOLDER(#56): replace with POST /v1/admin/connector-requests/{id}/decision (approve creates the grant via POST /v1/connectors/{id}/grants).
+    decideConnectorRequest: () =>
+      Promise.reject(
+        new RuntimeNotAvailableError("Deciding a connector request isn't available yet", 56)
+      ),
+    // RUNTIME-PLACEHOLDER(#56): replace with GET /v1/admin/connector-grants (needs tool descriptions, #55).
+    listConnectorGrants: () =>
+      Promise.reject(new RuntimeNotAvailableError("Connector grants aren't available yet", 56)),
   };
 }
