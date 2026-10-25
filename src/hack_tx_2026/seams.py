@@ -11,6 +11,7 @@ from typing import Any, Protocol
 
 from sqlalchemy import select
 
+from hack_tx_2026 import budgets
 from hack_tx_2026.db.base import SessionLocal
 from hack_tx_2026.db.orm import Agent, AgentVersion
 from hack_tx_2026.models.records import EntryPoint
@@ -51,8 +52,16 @@ def load_agent_tools(agent_version_id: str) -> list[Tool]:
 
 def check_agent_budget(agent_id: str) -> BudgetStatus:
     """Owned by platform (budget service). Called by the model gateway
-    before each call."""
-    raise NotImplementedError("owner:platform — budget service, ticket #21")
+    before each call. Raises LookupError if the agent has no versions."""
+    with SessionLocal() as session:
+        out = budgets.check_budget(session, agent_id)
+        session.commit()
+    return BudgetStatus(
+        state=out.state,
+        cap=float(out.cap),
+        spent=float(out.spent),
+        extra_allowance=float(out.extra_allowance),
+    )
 
 
 def create_ticket(run_id: str, question: str, answer: str, created_by: str) -> str:
