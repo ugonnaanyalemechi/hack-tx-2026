@@ -184,8 +184,8 @@ def test_the_model_sees_the_instructions_the_tool_and_its_result(
     first, second = fake_model.requests
     assert first.messages[0] == {"role": "system", "content": "Answer from the lookup tool."}
     assert first.messages[-1] == {"role": "user", "content": "What was revenue?"}
-    # Only the read-only tool is offered: side-effect tools wait for approvals.
-    assert [t["function"]["name"] for t in first.tools] == ["lookup"]
+    # Side-effect tools are offered too; they run only once approved (#24).
+    assert sorted(t["function"]["name"] for t in first.tools) == ["lookup", "note"]
     assert second.messages[-1]["role"] == "tool"
     assert second.messages[-1]["tool_call_id"] == "call_1"
     assert json.loads(second.messages[-1]["content"]) == {
@@ -252,20 +252,16 @@ def test_a_failed_turn_is_left_out_of_the_next_turns_memory(client, fake_model, 
 
 
 def test_a_side_effect_tool_is_not_run_without_approval(client, fake_model, agent_id) -> None:
-    fake_model.script(
-        reply(tool_calls=[tool_call("note", {"text": "remember this"})]),
-        reply("I could not record that note."),
-    )
+    fake_model.script(reply(tool_calls=[tool_call("note", {"text": "remember this"})]))
     thread = new_thread(client, agent_id)
 
     events = send(client, thread["id"], "Record a note")
 
-    [result] = [e for e in events if e["type"] == "tool_result"]
-    assert "not available" in result["output"]["error"]
-    assert events[-1] == {"type": "run_finished", "status": "completed"}
+    # The run stops on an approval instead (#24, tests/test_flow_approvals.py).
+    assert "tool_result" not in [e["type"] for e in events]
+    assert events[-1] == {"type": "run_finished", "status": "awaiting_approval"}
     detail = client.get(f"/v1/runs/{events[0]['run_id']}", headers=ADMIN).json()
-    [tool_step] = [s for s in detail["steps"] if s["kind"] == "tool"]
-    assert "not available" in tool_step["error"]
+    assert [s["kind"] for s in detail["steps"] if s["kind"] == "tool"] == []
 
 
 # --- Memory and isolation ---
