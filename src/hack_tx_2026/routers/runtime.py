@@ -14,7 +14,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import TypeAdapter
 from sqlalchemy.orm import Session
 
-from hack_tx_2026 import agent_runtime, chat
+from hack_tx_2026 import agent_runtime, chat, invoke
 from hack_tx_2026.db.base import get_session
 from hack_tx_2026.db.orm import Thread
 from hack_tx_2026.identity import CurrentUser, get_current_user
@@ -26,6 +26,7 @@ from hack_tx_2026.models.chat_api import (
     ThreadOut,
 )
 from hack_tx_2026.models.events import StreamEvent
+from hack_tx_2026.models.invoke_api import InvokeRequest, InvokeResponse
 
 router = APIRouter(prefix="/v1", tags=["runtime"])
 
@@ -114,3 +115,12 @@ def flag_run(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.post("/agents/{agent_id}/invoke")
+def invoke_agent(
+    agent_id: str, body: InvokeRequest, session: SessionDep, user: UserDep
+) -> InvokeResponse:
+    """Runs the agent's live version on a fresh conversation and answers once
+    the run stops. The status says how it stopped, as run_finished does."""
+    return invoke.invoke(session, user, agent_id, body.text)
