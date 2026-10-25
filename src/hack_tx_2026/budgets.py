@@ -18,6 +18,7 @@ from hack_tx_2026.models.budgets import (
     AdminQueue,
     BudgetOut,
     BudgetPauseItem,
+    QueueItem,
 )
 
 QUANT = Decimal("0.000001")
@@ -188,7 +189,7 @@ def list_budgets(session: Session) -> list[BudgetOut]:
 
 def admin_queue(session: Session) -> AdminQueue:
     paused = [b for b in list_budgets(session) if b.state == "paused"]
-    items = [
+    items: list[QueueItem] = [
         BudgetPauseItem(
             agent_id=b.agent_id,
             agent_name=b.agent_name,
