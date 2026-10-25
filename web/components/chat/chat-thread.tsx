@@ -4,13 +4,18 @@ import { useEffect, useRef } from "react";
 import { MessageSquare } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AssistantMessage, UserBubble } from "@/components/chat/message-row";
-import type { ChatMessage } from "@/lib/chat-types";
+import type { ApprovalDecision, ChatMessage } from "@/lib/chat-types";
 
 interface ChatThreadProps {
   messages: ChatMessage[];
   threadState: "loading" | "ready";
   agentName: string;
   onRetryMessage: (messageId: string) => void;
+  onDecide: (
+    messageId: string,
+    approvalId: string,
+    decision: ApprovalDecision
+  ) => void;
 }
 
 export function ChatThread({
@@ -18,6 +23,7 @@ export function ChatThread({
   threadState,
   agentName,
   onRetryMessage,
+  onDecide,
 }: ChatThreadProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -60,7 +66,13 @@ export function ChatThread({
           ) : (
             <AssistantMessage
               message={message}
+              agentName={agentName}
               onRetry={() => onRetryMessage(message.id)}
+              onDecide={(decision) => {
+                if (message.approval) {
+                  onDecide(message.id, message.approval.id, decision);
+                }
+              }}
             />
           )}
         </div>
