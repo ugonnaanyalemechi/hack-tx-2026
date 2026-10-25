@@ -1,0 +1,13 @@
+.venv
+.git
+.claude
+graphify-out
+.env
+.env.*
+!.env.example
+web
+__pycache__
+.mypy_cache
+.pytest_cache
+.ruff_cache
+tests
