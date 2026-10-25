@@ -300,3 +300,16 @@ def test_run_finished_is_sent_even_if_recording_the_finish_fails(
     events = send(client, thread["id"], "Hello")
 
     assert events[-1] == {"type": "run_finished", "status": "completed"}
+
+
+# --- Empty messages ---
+
+
+@pytest.mark.parametrize("body", ["", "   ", "\n\t "])
+def test_a_message_of_only_whitespace_is_rejected(client, fake_model, agent_id, body) -> None:
+    thread = new_thread(client, agent_id)
+
+    r = client.post(f"/v1/threads/{thread['id']}/messages", json={"text": body}, headers=END_USER)
+
+    assert r.status_code == 422
+    assert fake_model.requests == []
