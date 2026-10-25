@@ -12,8 +12,8 @@ from typing import Any
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
-from hack_tx_2026 import agent_runtime, seams
-from hack_tx_2026.admin_reads import _b64, _unb64, _utc
+from hack_tx_2026 import agent_runtime, seams, tickets
+from hack_tx_2026.cursors import b64, decode_stamp_cursor, utc
 from hack_tx_2026.db.orm import Agent, AgentVersion, Approval, Run, Thread, Ticket
 from hack_tx_2026.errors import ApiError
 from hack_tx_2026.identity import CurrentUser
@@ -28,8 +28,8 @@ def _thread_out(thread: Thread) -> ThreadOut:
         id=thread.id,
         agent_id=thread.agent_id,
         title=thread.title,
-        created_at=_utc(thread.created_at),
-        last_updated_at=_utc(thread.last_updated_at),
+        created_at=utc(thread.created_at),
+        last_updated_at=utc(thread.last_updated_at),
     )
 
 
@@ -48,14 +48,6 @@ def create_thread(session: Session, user: CurrentUser, agent_id: str) -> ThreadO
     return _thread_out(thread)
 
 
-def _cursor(cursor: str) -> tuple[dt.datetime, str]:
-    try:
-        stamp, thread_id = _unb64(cursor).split("|", 1)
-        return _utc(dt.datetime.fromisoformat(stamp)), thread_id
-    except ValueError:
-        raise ApiError(422, "invalid_cursor", "Cursor is not valid") from None
-
-
 def list_threads(
     session: Session, user: CurrentUser, agent_id: str, limit: int, cursor: str | None
 ) -> Page[ThreadOut]:
@@ -68,7 +60,7 @@ def list_threads(
         .limit(limit + 1)
     )
     if cursor:
-        stamp, thread_id = _cursor(cursor)
+        stamp, thread_id = decode_stamp_cursor(cursor)
         stmt = stmt.where(
             or_(
                 Thread.last_updated_at < stamp,
@@ -80,7 +72,7 @@ def list_threads(
     next_cursor = None
     if len(rows) > limit:
         last = page[-1]
-        next_cursor = _b64(f"{_utc(last.last_updated_at).isoformat()}|{last.id}")
+        next_cursor = b64(f"{utc(last.last_updated_at).isoformat()}|{last.id}")
     return Page[ThreadOut](items=[_thread_out(t) for t in page], next_cursor=next_cursor)
 
 
@@ -106,6 +98,18 @@ def read_messages(thread: Thread) -> list[MessageOut]:
     ]
 
 
+def ensure_not_busy(session: Session, thread: Thread) -> None:
+    """409 thread_busy while another run on the thread is still going. Two runs
+    on one thread would overwrite each other's memory. Locks the thread row
+    until the caller commits, so two messages arriving together can't both pass."""
+    session.execute(select(Thread.id).where(Thread.id == thread.id).with_for_update())
+    running = session.scalar(
+        select(Run.id).where(Run.thread_id == thread.id, Run.status == "running").limit(1)
+    )
+    if running is not None:
+        raise ApiError(409, "thread_busy", "This chat is still answering the last message")
+
+
 def start_chat_run(
     session: Session, user: CurrentUser, thread: Thread, text: str
 ) -> tuple[Run, dict[str, Any]]:
@@ -116,6 +120,7 @@ def start_chat_run(
         version = seams.read_agent_version(thread.agent_id)
     except LookupError:
         raise ApiError(409, "no_live_version", "This agent has no live version yet") from None
+    ensure_not_busy(session, thread)
     run = Run(
         agent_id=thread.agent_id,
         agent_version_id=version["agent_version_id"],
@@ -244,6 +249,11 @@ class FlagTarget:
     answer: str
 
 
+def _ensure_not_flagged(session: Session, run: Run) -> None:
+    if session.scalar(select(Ticket.id).where(Ticket.run_id == run.id)) is not None:
+        raise ApiError(409, "already_flagged", "This answer has already been flagged")
+
+
 def flaggable_run(session: Session, user: CurrentUser, run_id: str) -> FlagTarget:
     """The run to flag, checked before the re-check stream opens: 404 if
     unknown, 403 if it is someone else's, 409 `already_flagged` if a ticket
@@ -253,15 +263,20 @@ def flaggable_run(session: Session, user: CurrentUser, run_id: str) -> FlagTarge
         raise ApiError(404, "run_not_found", "Run not found")
     if run.user_id != user.id:
         raise ApiError(403, "forbidden", "Only the person who got this answer can flag it")
-    if session.scalar(select(Ticket.id).where(Ticket.run_id == run.id)) is not None:
-        raise ApiError(409, "already_flagged", "This answer has already been flagged")
+    _ensure_not_flagged(session, run)
     # A chat run's memory is its thread's; a re-check run's is its own.
     entries = agent_runtime.read_transcript(run.thread_id or run.id)
     question = next(
         (e["text"] for e in entries if e["role"] == "user" and e.get("run_id") == run.id), None
     )
+    # The last assistant entry is the final answer: a run that asked for an
+    # approval first wrote an earlier entry (what the model said before asking).
     answer = next(
-        (e["text"] for e in entries if e["role"] == "assistant" and e.get("run_id") == run.id),
+        (
+            e["text"]
+            for e in reversed(entries)
+            if e["role"] == "assistant" and e.get("run_id") == run.id
+        ),
         None,
     )
     if question is None or answer is None:
@@ -272,16 +287,27 @@ def flaggable_run(session: Session, user: CurrentUser, run_id: str) -> FlagTarge
 def start_recheck_run(
     session: Session, user: CurrentUser, target: FlagTarget
 ) -> tuple[Run, dict[str, Any]]:
-    """Files the ticket for a flagged answer, then creates the re-check run
-    on the same agent version (no thread: it runs on fresh memory) and
-    attaches it to the ticket. Commits. Returns the run and its version (as
-    `seams.read_agent_version` returns it)."""
-    flagged = target.run
+    """Files the ticket for a flagged answer and creates the re-check run on
+    the same agent version (no thread: it runs on fresh memory), linked to the
+    ticket, all in one transaction. Commits. Returns the run and its version
+    (as `seams.read_agent_version` returns it).
+
+    The flagged run's row stays locked until the commit, so flags arriving
+    together file one ticket: the others wait, then find it and get 409."""
+    flagged = session.scalar(select(Run).where(Run.id == target.run.id).with_for_update())
+    assert flagged is not None
+    _ensure_not_flagged(session, flagged)
     version_row = session.get(AgentVersion, flagged.agent_version_id)
     if version_row is None:  # pragma: no cover — FK guarantees this
         raise ApiError(404, "run_not_found", "Run not found")
     version = seams.read_agent_version(flagged.agent_id, version_row.version_number)
-    ticket_id = seams.create_ticket(flagged.id, target.question, target.answer, user.id)
+    ticket = tickets.create_ticket(
+        session,
+        run_id=flagged.id,
+        question=target.question,
+        answer=target.answer,
+        created_by=user.id,
+    )
     run = Run(
         agent_id=flagged.agent_id,
         agent_version_id=flagged.agent_version_id,
@@ -289,6 +315,7 @@ def start_recheck_run(
         entry_point="recheck",
     )
     session.add(run)
+    session.flush()
+    tickets.attach_recheck_run(session, ticket_id=ticket.id, recheck_run_id=run.id)
     session.commit()
-    seams.attach_recheck_run(ticket_id, run.id)
     return run, version

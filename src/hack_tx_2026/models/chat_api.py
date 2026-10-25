@@ -2,9 +2,9 @@
 itself is models/events.py."""
 
 import datetime as dt
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, StringConstraints
 
 
 class ThreadOut(BaseModel):
@@ -25,7 +25,7 @@ class MessageOut(BaseModel):
 
 
 class SendMessageRequest(BaseModel):
-    text: str = Field(min_length=1)
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
 class DecisionRequest(BaseModel):

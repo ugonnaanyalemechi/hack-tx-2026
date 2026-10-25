@@ -6,6 +6,7 @@ Every model call is the scripted fake model behind the real gateway; every
 tool runs on the fake MCP server through the connector layer.
 """
 
+import json
 from collections.abc import Iterator
 from decimal import Decimal
 
@@ -229,3 +230,50 @@ def test_an_empty_invoke_is_rejected(client, fake_model, agent_id) -> None:
 
     assert r.status_code == 422
     assert fake_model.requests == []
+
+
+# --- Approvals on an invoke ---
+
+NOTE = {"text": "Revenue was $12M"}
+
+
+def test_an_invoke_that_asks_for_approval_returns_the_approval(
+    client, fake_model, agent_id
+) -> None:
+    fake_model.script(reply(tool_calls=[tool_call("note", NOTE, id="call_note")]))
+
+    body = invoke(client, agent_id, "Save a note about revenue")
+
+    assert body["status"] == "awaiting_approval"
+    assert body["message"] is None
+    assert body["error"] is None
+    assert body["approval"]["approval_id"].startswith("apr_")
+    assert body["approval"]["tool_name"] == "note"
+    assert body["approval"]["tool_input"] == NOTE
+
+
+def test_deciding_an_invokes_approval_resumes_the_run(client, fake_model, agent_id) -> None:
+    fake_model.script(reply(tool_calls=[tool_call("note", NOTE, id="call_note")]))
+    asked = invoke(client, agent_id, "Save a note about revenue")
+    fake_model.script(reply("Saved the note."))
+
+    with client.stream(
+        "POST",
+        f"/v1/approvals/{asked['approval']['approval_id']}/decision",
+        json={"decision": "approve"},
+        headers=END_USER,
+    ) as r:
+        assert r.status_code == 200, r.read()
+        body = "".join(r.iter_text())
+
+    events = [
+        json.loads(line.removeprefix("data: "))
+        for line in body.splitlines()
+        if line.startswith("data: ")
+    ]
+    assert events[0] == {"type": "run_started", "run_id": asked["run_id"]}
+    assert events[-2] == {"type": "message_complete", "text": "Saved the note."}
+    assert events[-1] == {"type": "run_finished", "status": "completed"}
+    detail = client.get(f"/v1/runs/{asked['run_id']}", headers=ADMIN).json()
+    assert detail["run"]["status"] == "completed"
+    assert detail["run"]["entry_point"] == "api"

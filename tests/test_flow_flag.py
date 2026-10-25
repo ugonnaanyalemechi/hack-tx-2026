@@ -8,6 +8,7 @@ Every model call is the scripted fake model behind the real gateway.
 
 import json
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 import yaml
@@ -328,3 +329,21 @@ def test_a_run_without_an_answer_cannot_be_flagged(client, fake_model, agent_id)
     assert r.status_code == 409
     assert r.json()["error"]["code"] == "no_answer"
     assert client.get("/v1/tickets", headers=ADMIN).json()["items"] == []
+
+
+def test_flags_arriving_together_file_one_ticket_with_its_recheck(
+    client, fake_model, agent_id
+) -> None:
+    _, run_id = flagged_run(client, fake_model, agent_id)
+    fake_model.script(*[reply("Revenue was 12.") for _ in range(4)])
+
+    def post(_: int) -> int:
+        return client.post(f"/v1/runs/{run_id}/flag", json={}, headers=END_USER).status_code
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        statuses = sorted(executor.map(post, range(4)))
+
+    assert statuses == [200, 409, 409, 409]
+    [item] = client.get("/v1/tickets", headers=ADMIN).json()["items"]
+    ticket = client.get(f"/v1/tickets/{item['id']}", headers=ADMIN).json()
+    assert ticket["recheck_run_id"] is not None

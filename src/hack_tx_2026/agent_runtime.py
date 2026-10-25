@@ -37,7 +37,9 @@ Where later tickets plug in:
 """
 
 import datetime as dt
+import functools
 import json
+import logging
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -53,7 +55,7 @@ from langgraph.runtime import Runtime
 from langgraph.types import Command, interrupt
 
 from hack_tx_2026 import output_guard, recorder, seams
-from hack_tx_2026.checkpointer import get_checkpointer
+from hack_tx_2026.checkpointer import PooledSaver, get_checkpointer
 from hack_tx_2026.db.base import SessionLocal
 from hack_tx_2026.db.orm import Approval, Run, Thread
 from hack_tx_2026.gateway import (
@@ -78,6 +80,8 @@ from hack_tx_2026.models.events import (
     ToolResultEvent,
 )
 from hack_tx_2026.models.spec import AgentSpec
+
+logger = logging.getLogger(__name__)
 
 # Graph steps per run. One tool turn is model -> tools -> model -> respond;
 # this leaves room for a few more and stops a model that loops on tools.
@@ -206,6 +210,27 @@ def _run_tool(ctx: RunContext, name: str, arguments: dict[str, Any]) -> dict[str
     return output
 
 
+def _parse_arguments(raw: str | None) -> dict[str, Any] | None:
+    """A tool call's arguments as a dict, or None if they are not a JSON object."""
+    try:
+        parsed = json.loads(raw or "{}")
+    except ValueError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _record_bad_arguments(ctx: RunContext, name: str) -> dict[str, Any]:
+    """Records a tool step for a call whose arguments could not be read and
+    returns the error result the model is shown."""
+    error = "The arguments were not a valid JSON object. Call the tool again with a JSON object."
+    with SessionLocal() as session:
+        recorder.record_step(
+            session, ctx.run_id, kind="tool", name=name, input={}, output=None, error=error
+        )
+        session.commit()
+    return {"error": error}
+
+
 def _request_approval(ctx: RunContext, name: str, arguments: dict[str, Any]) -> str:
     """Records a pending approval and its approval step; returns the approval's id."""
     with SessionLocal() as session:
@@ -239,17 +264,36 @@ def _tools_node(state: ChatState, runtime: Runtime[RunContext]) -> ChatState:
         if call["id"] in answered:
             continue
         name = call["function"]["name"]
-        arguments = json.loads(call["function"].get("arguments") or "{}")
+        arguments = _parse_arguments(call["function"].get("arguments"))
+        if arguments is None:
+            # The model sent arguments that are not a JSON object: tell it so
+            # and let it try again, instead of failing the run.
+            write(ToolCallEvent(name=name, input={}))
+            output = _record_bad_arguments(runtime.context, name)
+            write(ToolResultEvent(name=name, output=output))
+            results.append(
+                {"role": "tool", "tool_call_id": call["id"], "content": json.dumps(output)}
+            )
+            continue
         if name in side_effect:
             update: ChatState = {}
             text = turn[index].get("content") or ""
             first_approval = not any(c["function"]["name"] in side_effect for c in calls[:position])
             if text and first_approval:
                 # What the model said before asking is a message of its own.
+                # It gets the secrets pass (not the citation check: it is not
+                # the answer) and memory keeps the guarded text.
+                text = _strip_secrets_from(runtime.context, text)
                 write(MessageCompleteEvent(text=text))
                 update["transcript"] = [
-                    {"role": "assistant", "text": text, "created_at": _now_iso()}
+                    {
+                        "role": "assistant",
+                        "text": text,
+                        "created_at": _now_iso(),
+                        "run_id": runtime.context.run_id,
+                    }
                 ]
+                turn = [*turn[:index], {**turn[index], "content": text}, *turn[index + 1 :]]
             approval_id = _request_approval(runtime.context, name, arguments)
             write(
                 ApprovalRequiredEvent(approval_id=approval_id, tool_name=name, tool_input=arguments)
@@ -331,6 +375,40 @@ def _guard_answer(ctx: RunContext, text: str) -> str:
     return result.text
 
 
+def _strip_secrets_from(ctx: RunContext, text: str) -> str:
+    """Strips secrets from text the user sees before the final answer (what the
+    model said before asking for approval). Records a guard step and streams a
+    GuardNoteEvent only when something was stripped."""
+    guardrails = ctx.spec.guardrails
+    if not guardrails.strip_secrets:
+        return text
+    started = time.monotonic()
+    result = output_guard.guard_text(
+        text, guardrails.model_copy(update={"require_citation": False})
+    )
+    if not result.changed:
+        return text
+    with SessionLocal() as session:
+        recorder.record_step(
+            session,
+            ctx.run_id,
+            kind="guard",
+            name="output_guard",
+            input={"require_citation": False, "strip_secrets": True},
+            output={
+                "secrets_stripped": result.secrets_stripped,
+                "blocked": False,
+                "notes": result.notes,
+            },
+            latency_ms=int((time.monotonic() - started) * 1000),
+        )
+        session.commit()
+    write = get_stream_writer()
+    for note in result.notes:
+        write(GuardNoteEvent(note=note))
+    return result.text
+
+
 def _respond_node(state: ChatState, runtime: Runtime[RunContext]) -> ChatState:
     turn = state["turn"]
     text = _guard_answer(runtime.context, turn[-1].get("content") or "")
@@ -352,6 +430,15 @@ def _respond_node(state: ChatState, runtime: Runtime[RunContext]) -> ChatState:
 
 
 def build_graph() -> CompiledStateGraph[ChatState, RunContext, ChatState, ChatState]:
+    """The compiled graph over the current checkpointer. Compiled once per
+    checkpointer, not per call (tests that install another one get their own)."""
+    return _compile(get_checkpointer())
+
+
+@functools.lru_cache(maxsize=1)
+def _compile(
+    saver: PooledSaver,
+) -> CompiledStateGraph[ChatState, RunContext, ChatState, ChatState]:
     graph = StateGraph(ChatState, context_schema=RunContext)
     graph.add_node("model", _model_node)
     graph.add_node("tools", _tools_node)
@@ -362,7 +449,7 @@ def build_graph() -> CompiledStateGraph[ChatState, RunContext, ChatState, ChatSt
     graph.add_conditional_edges("tools", _after_tools, ["approval", "model"])
     graph.add_edge("approval", "tools")
     graph.add_edge("respond", END)
-    return graph.compile(checkpointer=get_checkpointer())
+    return graph.compile(checkpointer=saver)
 
 
 def _config(thread_id: str) -> RunnableConfig:
@@ -466,39 +553,62 @@ def _stream_run(
     graph_input: ChatState | Command,
 ) -> Iterator[Any]:
     yield RunStartedEvent(run_id=run_id)
-    status: RunFinishedStatus = "completed"
-    error: ErrorEvent | None = None
-    paused: BudgetPausedEvent | None = None
+    # If the consumer closes the stream early (client disconnect), the run
+    # ends "failed": it never reached an outcome.
+    status: RunFinishedStatus = "failed"
+    finished = False
     try:
-        context = RunContext(
-            run_id=run_id,
-            agent_version_id=agent_version_id,
-            spec=AgentSpec.model_validate(spec),
-            tools=seams.load_agent_tools(agent_version_id),
-        )
-        graph = build_graph()
-        yield from graph.stream(
-            graph_input, _config(thread_id), context=context, stream_mode="custom"
-        )
-        if _awaits_approval(graph, thread_id):
-            status = "awaiting_approval"
-        paused = _budget_pause(graph, thread_id)
-    except ModelCallError:
-        error = ErrorEvent(code="model_error", message="The model could not answer. Try again.")
-    except GraphRecursionError:
-        error = ErrorEvent(
-            code="too_many_steps", message="The agent took too many steps to answer."
-        )
+        error: ErrorEvent | None = None
+        paused: BudgetPausedEvent | None = None
+        status = "completed"
+        try:
+            context = RunContext(
+                run_id=run_id,
+                agent_version_id=agent_version_id,
+                spec=AgentSpec.model_validate(spec),
+                tools=seams.load_agent_tools(agent_version_id),
+            )
+            graph = build_graph()
+            status = "failed"  # until the stream below runs to its end
+            yield from graph.stream(
+                graph_input, _config(thread_id), context=context, stream_mode="custom"
+            )
+            status = "awaiting_approval" if _awaits_approval(graph, thread_id) else "completed"
+            paused = _budget_pause(graph, thread_id)
+        except ModelCallError:
+            logger.warning("Model call failed in run %s", run_id, exc_info=True)
+            error = ErrorEvent(code="model_error", message="The model could not answer. Try again.")
+        except GraphRecursionError:
+            logger.warning("Run %s hit the recursion limit", run_id, exc_info=True)
+            error = ErrorEvent(
+                code="too_many_steps", message="The agent took too many steps to answer."
+            )
+        except Exception:
+            logger.exception("Run %s failed unexpectedly", run_id)
+            error = ErrorEvent(code="internal_error", message="Something went wrong. Try again.")
+        warning = _budget_warning(run_id, spec)
+        if error is not None:
+            status = "failed"
+        elif paused is not None:
+            status = "paused"
+        if warning is not None:
+            yield warning
+        if error is not None:
+            yield error
+        elif paused is not None:
+            yield paused
+        finished = True
+        _finish_quietly(run_id, thread_id, status)
+        yield RunFinishedEvent(status=status)
+    finally:
+        if not finished:
+            _finish_quietly(run_id, thread_id, status)
+
+
+def _finish_quietly(run_id: str, thread_id: str, status: RunFinishedStatus) -> None:
+    """`_finish`, but a failure to record the end of a run is logged, not raised:
+    the stream must still end with run_finished."""
+    try:
+        _finish(run_id, thread_id, status)
     except Exception:
-        error = ErrorEvent(code="internal_error", message="Something went wrong. Try again.")
-    warning = _budget_warning(run_id, spec)
-    if warning is not None:
-        yield warning
-    if error is not None:
-        status = "failed"
-        yield error
-    elif paused is not None:
-        status = "paused"
-        yield paused
-    _finish(run_id, thread_id, status)
-    yield RunFinishedEvent(status=status)
+        logger.exception("Could not record that run %s finished as %s", run_id, status)

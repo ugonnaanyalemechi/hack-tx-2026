@@ -84,6 +84,22 @@ def _sse(events: Iterator[Any]) -> Iterator[str]:
         yield f"data: {_EVENT.dump_json(event).decode()}\n\n"
 
 
+def _release(session: Session) -> None:
+    """Gives the request's database connection back to the pool. A stream runs
+    for as long as the model takes; without this every open chat would hold a
+    connection (idle in a transaction) until it ends. Read what the stream
+    needs from ORM objects first: they are detached after this."""
+    session.close()
+
+
+def _stream_response(events: Iterator[Any]) -> StreamingResponse:
+    return StreamingResponse(
+        _sse(events),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @router.post("/agents/{agent_id}/threads", status_code=201)
 def create_thread(agent_id: str, session: SessionDep, user: UserDep) -> ThreadOut:
     return chat.create_thread(session, user, agent_id)
@@ -110,34 +126,34 @@ def send_message(
     body: SendMessageRequest, thread: OpenThreadDep, session: SessionDep, user: UserDep
 ) -> StreamingResponse:
     """Streams the run's events (models/events.py) as server-sent events."""
+    thread_id = thread.id
     run, version = chat.start_chat_run(session, user, thread, body.text)
     events = agent_runtime.stream_chat(
         run_id=run.id,
-        thread_id=thread.id,
+        thread_id=thread_id,
         agent_version_id=version["agent_version_id"],
         spec=version["spec"],
         text=body.text,
     )
-    return StreamingResponse(
-        _sse(events),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
+    _release(session)
+    return _stream_response(events)
 
 
 @router.post("/threads/{thread_id}/resume")
-def resume_thread(thread: OwnedThreadDep, resumed: ResumedRunDep) -> StreamingResponse:
+def resume_thread(
+    thread: OwnedThreadDep, resumed: ResumedRunDep, session: SessionDep
+) -> StreamingResponse:
     """Continue: resumes the thread's paused run from its checkpoint and
     streams its events (models/events.py) as server-sent events."""
     run, spec = resumed
     events = agent_runtime.resume_chat(
-        run_id=run.id, thread_id=thread.id, agent_version_id=run.agent_version_id, spec=spec
+        run_id=run.id,
+        thread_id=thread.id,
+        agent_version_id=run.agent_version_id,
+        spec=spec,
     )
-    return StreamingResponse(
-        _sse(events),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
+    _release(session)
+    return _stream_response(events)
 
 
 @router.post("/approvals/{approval_id}/decision")
@@ -155,11 +171,8 @@ def decide_approval(
         spec=spec,
         decision=body.decision,
     )
-    return StreamingResponse(
-        _sse(events),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
+    _release(session)
+    return _stream_response(events)
 
 
 @router.post("/runs/{run_id}/flag")
@@ -168,19 +181,17 @@ def flag_run(
 ) -> StreamingResponse:
     """Files a ticket for the run's answer, then streams a re-check run: the
     same agent version answering the same question on fresh memory."""
+    question = target.question
     run, version = chat.start_recheck_run(session, user, target)
     events = agent_runtime.stream_chat(
         run_id=run.id,
         thread_id=run.id,
         agent_version_id=version["agent_version_id"],
         spec=version["spec"],
-        text=target.question,
+        text=question,
     )
-    return StreamingResponse(
-        _sse(events),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
+    _release(session)
+    return _stream_response(events)
 
 
 @router.post("/agents/{agent_id}/invoke")
