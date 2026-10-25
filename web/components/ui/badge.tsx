@@ -18,6 +18,15 @@ const badgeVariants = cva(
         ghost:
           "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
         link: "text-primary underline-offset-4 hover:underline",
+        // Nocturne status badges (docs/design-system.md §6, Badges): the
+        // color at 12% fill, 28% border, full strength for the text.
+        neutral: "h-6 rounded-pill border-white/12 bg-white/8 px-2.5 text-neutral-200",
+        brand:
+          "h-6 rounded-pill border-primary-400/30 bg-primary-500/18 px-2.5 text-primary-300",
+        success: "h-6 rounded-pill border-success/28 bg-success/12 px-2.5 text-success",
+        warning: "h-6 rounded-pill border-warning/28 bg-warning/12 px-2.5 text-warning",
+        error: "h-6 rounded-pill border-error/28 bg-error/12 px-2.5 text-error",
+        info: "h-6 rounded-pill border-info/28 bg-info/12 px-2.5 text-info",
       },
     },
     defaultVariants: {
