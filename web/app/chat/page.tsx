@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useSearchParams } from "next/navigation";
-import { TopNav } from "@/components/chat/top-nav";
+import { TopNav } from "@/components/shell/top-nav";
 import { ChatSidebar } from "@/components/chat/chat-sidebar";
 import { ChatThread } from "@/components/chat/chat-thread";
 import { Composer } from "@/components/chat/composer";

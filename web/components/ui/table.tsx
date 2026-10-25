@@ -4,7 +4,7 @@ import * as React from "react"
 import { cn } from "cn"
 
 // Themed for Foundry tables: subtle hairline rows, small brand-tinted
-// header labels, and a cobalt tint for the selected row.
+// header labels, and an amber tint for the selected row.
 
 function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
