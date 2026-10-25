@@ -21,8 +21,8 @@ thread's id:
 
 Where later tickets plug in:
 
-- #16 output guard: in `respond`, before MessageCompleteEvent: guard the final
-  text, record guard steps, stream a GuardNoteEvent when it changed something.
+- #16 output guard (done): `respond` calls `output_guard.guard_text`, records an
+  `output_guard` step and streams GuardNoteEvents before MessageCompleteEvent.
 - #22 budget pause: `ModelGateway._check_budget` raises before a call; catch
   that in `model` and `interrupt(...)`, then report it from `stream_chat`
   (BudgetPausedEvent, run_finished "paused"). Resume is a Command(resume=...)
@@ -48,7 +48,7 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.runtime import Runtime
 from langgraph.types import Command, interrupt
 
-from hack_tx_2026 import recorder, seams
+from hack_tx_2026 import output_guard, recorder, seams
 from hack_tx_2026.checkpointer import get_checkpointer
 from hack_tx_2026.db.base import SessionLocal
 from hack_tx_2026.db.orm import Approval, Run, Thread
@@ -56,6 +56,7 @@ from hack_tx_2026.gateway import Message, ModelCallError, ToolSchema, get_gatewa
 from hack_tx_2026.models.events import (
     ApprovalRequiredEvent,
     ErrorEvent,
+    GuardNoteEvent,
     MessageCompleteEvent,
     RunFinishedEvent,
     RunFinishedStatus,
@@ -215,9 +216,7 @@ def _tools_node(state: ChatState, runtime: Runtime[RunContext]) -> ChatState:
         if name in side_effect:
             update: ChatState = {}
             text = turn[index].get("content") or ""
-            first_approval = not any(
-                c["function"]["name"] in side_effect for c in calls[:position]
-            )
+            first_approval = not any(c["function"]["name"] in side_effect for c in calls[:position])
             if text and first_approval:
                 # What the model said before asking is a message of its own.
                 write(MessageCompleteEvent(text=text))
@@ -225,7 +224,9 @@ def _tools_node(state: ChatState, runtime: Runtime[RunContext]) -> ChatState:
                     {"role": "assistant", "text": text, "created_at": _now_iso()}
                 ]
             approval_id = _request_approval(runtime.context, name, arguments)
-            write(ApprovalRequiredEvent(approval_id=approval_id, tool_name=name, tool_input=arguments))
+            write(
+                ApprovalRequiredEvent(approval_id=approval_id, tool_name=name, tool_input=arguments)
+            )
             pending: PendingApproval = {
                 "approval_id": approval_id,
                 "tool_call_id": call["id"],
@@ -273,13 +274,44 @@ def _approval_node(state: ChatState, runtime: Runtime[RunContext]) -> ChatState:
     return {"turn": [*state["turn"], result], "pending_approval": None}
 
 
-def _respond_node(state: ChatState) -> ChatState:
+def _guard_answer(ctx: RunContext, text: str) -> str:
+    """Runs the output guard on the final text, records its step and streams a
+    GuardNoteEvent per change. Returns the text the user gets."""
+    started = time.monotonic()
+    guardrails = ctx.spec.guardrails
+    result = output_guard.guard_text(text, guardrails)
+    with SessionLocal() as session:
+        recorder.record_step(
+            session,
+            ctx.run_id,
+            kind="guard",
+            name="output_guard",
+            input={
+                "require_citation": guardrails.require_citation,
+                "strip_secrets": guardrails.strip_secrets,
+            },
+            output={
+                "secrets_stripped": result.secrets_stripped,
+                "blocked": result.blocked,
+                "notes": result.notes,
+            },
+            latency_ms=int((time.monotonic() - started) * 1000),
+        )
+        session.commit()
+    write = get_stream_writer()
+    for note in result.notes:
+        write(GuardNoteEvent(note=note))
+    return result.text
+
+
+def _respond_node(state: ChatState, runtime: Runtime[RunContext]) -> ChatState:
     turn = state["turn"]
-    text = turn[-1].get("content") or ""
-    # The output guard (#16) runs here, before message_complete.
+    text = _guard_answer(runtime.context, turn[-1].get("content") or "")
     get_stream_writer()(MessageCompleteEvent(text=text))
+    # Memory keeps the guarded text, never what the model first said.
+    final: Message = {**turn[-1], "content": text}
     return {
-        "messages": turn,
+        "messages": [*turn[:-1], final],
         "turn": [],
         "transcript": [{"role": "assistant", "text": text, "created_at": _now_iso()}],
     }
@@ -343,11 +375,11 @@ def stream_decision(
     yield from _stream_run(run_id, thread_id, agent_version_id, spec, Command(resume=decision))
 
 
-def _awaits_approval(graph: CompiledStateGraph, thread_id: str) -> bool:
+def _awaits_approval(
+    graph: CompiledStateGraph[ChatState, RunContext, ChatState, ChatState], thread_id: str
+) -> bool:
     interrupts = graph.get_state(_config(thread_id)).interrupts
-    return any(
-        isinstance(i.value, dict) and i.value.get("kind") == "approval" for i in interrupts
-    )
+    return any(isinstance(i.value, dict) and i.value.get("kind") == "approval" for i in interrupts)
 
 
 def _stream_run(

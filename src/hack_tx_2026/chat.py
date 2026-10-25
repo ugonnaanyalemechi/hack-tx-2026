@@ -147,9 +147,7 @@ def ensure_no_pending_approval(session: Session, thread: Thread) -> None:
 def decidable_approval(session: Session, user: CurrentUser, approval_id: str) -> Approval:
     """The pending approval, locked until the decision commits: 404 if unknown,
     403 unless the caller is the run's user, 409 if already decided."""
-    approval = session.scalar(
-        select(Approval).where(Approval.id == approval_id).with_for_update()
-    )
+    approval = session.scalar(select(Approval).where(Approval.id == approval_id).with_for_update())
     if approval is None:
         raise ApiError(404, "approval_not_found", "Approval not found")
     run = session.get(Run, approval.run_id)

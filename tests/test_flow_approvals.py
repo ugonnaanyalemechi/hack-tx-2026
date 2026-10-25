@@ -82,6 +82,8 @@ def agent_id(client, db_session, runtime_db) -> str:
         "connectors": [{"name": "fake-mcp"}],
         "budget": {"monthly_cap": 10.0},
         "evals": {"min_score": 0.8},
+        # These tests are not about the output guard (see test_flow_guard.py).
+        "guardrails": {"require_citation": False, "strip_secrets": False},
     }
     fake_mcp = connectors.seed_fake_mcp_connector(db_session)
     r = client.post("/v1/agents", json={"spec_yaml": yaml.safe_dump(spec)}, headers=BUILDER)
@@ -262,6 +264,7 @@ def test_an_approved_run_records_the_tool_step_and_who_decided_when(
         ("approval", "note"),
         ("tool", "note"),
         ("model", "gemini/gemini-3.8-flash"),
+        ("guard", "output_guard"),
     ]
     decision = detail["steps"][1]["approval"]
     assert decision["id"] == approval_id
@@ -307,7 +310,7 @@ def test_a_rejected_run_records_who_rejected_and_never_runs_the_tool(
 
     detail = client.get(f"/v1/runs/{run_id}", headers=ADMIN).json()
     assert detail["run"]["status"] == "completed"
-    assert [s["kind"] for s in detail["steps"]] == ["model", "approval", "model"]
+    assert [s["kind"] for s in detail["steps"]] == ["model", "approval", "model", "guard"]
     decision = detail["steps"][1]["approval"]
     assert decision["status"] == "rejected"
     assert decision["decided_by"] == "usr_end_user"
@@ -426,6 +429,7 @@ def test_each_approval_step_shows_its_own_decision(
         "tool",
         "approval",
         "model",
+        "guard",
     ]
     by_step = [s["approval"] for s in detail["steps"] if s["kind"] == "approval"]
     assert [(a["id"], a["status"]) for a in by_step] == [
