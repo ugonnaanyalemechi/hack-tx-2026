@@ -19,6 +19,7 @@ import {
   getSeedChats,
   mockContinueRun,
   mockDecideApproval,
+  mockFlagAnswer,
   mockSendMessage,
 } from "@/lib/mock-chat";
 import type {
@@ -26,6 +27,7 @@ import type {
   ApprovalRequest,
   ChatMessage,
   ChatSummary,
+  FlagState,
 } from "@/lib/chat-types";
 import type { StreamEvent } from "@/lib/contracts/events";
 
@@ -69,6 +71,7 @@ function ChatPageInner() {
   // fast; the UI still goes through every real event in order.
   const streamSpeed = searchParams.get("fastStream") === "1" ? 0.05 : 1;
   const forceDecideError = searchParams.get("decideError") === "1";
+  const forceFlagError = searchParams.get("flagError") === "1";
   const budgetPreview = searchParams.get("budget");
 
   // The agent's budget state (never its cost) from the mock store, which
@@ -414,6 +417,59 @@ function ChatPageInner() {
     await runStream(chatId, continuation.id, events);
   }
 
+  function setFlag(chatId: string, messageId: string, flag: FlagState) {
+    patchAssistantMessage(chatId, messageId, { flag });
+  }
+
+  /** Flags an answer: the re-check streams back as a new message right
+   * after the flagged one, so it clearly follows it. */
+  async function handleFlag(messageId: string) {
+    if (!activeChatId) return;
+    const chatId = activeChatId;
+    const chat = chats.find((c) => c.id === chatId);
+    const index = chat?.messages.findIndex((m) => m.id === messageId) ?? -1;
+    const question = index > 0 ? chat?.messages[index - 1] : undefined;
+    if (!chat || !question || question.role !== "user") return;
+
+    setFlag(chatId, messageId, { status: "flagging" });
+    let events: AsyncIterable<StreamEvent>;
+    try {
+      // RUNTIME-PLACEHOLDER(#30): mock flag call; swap for the live flag call and its re-check stream. The ?flagError=1 switch is a mock-only test hook.
+      events = await mockFlagAnswer(messageId, question.text, {
+        speed: streamSpeed,
+        failFirstAttempt: forceFlagError,
+      });
+    } catch {
+      setFlag(chatId, messageId, {
+        status: "error",
+        error: "Couldn't send your flag. Check your connection and try again.",
+      });
+      return;
+    }
+
+    setFlag(chatId, messageId, { status: "rechecking" });
+    const recheck: ChatMessage = {
+      id: localId("msg"),
+      role: "assistant",
+      text: null,
+      preview: "",
+      status: "streaming",
+      recheckOf: messageId,
+      createdAt: new Date().toISOString(),
+    };
+    setChats((prev) =>
+      prev.map((c) => {
+        if (c.id !== chatId) return c;
+        const at = c.messages.findIndex((m) => m.id === messageId);
+        const messages = [...c.messages];
+        messages.splice(at + 1, 0, recheck);
+        return { ...c, messages };
+      })
+    );
+    await runStream(chatId, recheck.id, events);
+    setFlag(chatId, messageId, { status: "rechecked" });
+  }
+
   function handleSelectChat(chatId: string) {
     if (chatId === activeChatId) return;
     setThreadState("loading");
@@ -488,6 +544,7 @@ function ChatPageInner() {
             threadState={threadState}
             agentName={MOCK_AGENT.name}
             onRetryMessage={handleRetryMessage}
+            onFlag={handleFlag}
             onDecide={handleDecide}
             footer={
               showPaused ? (

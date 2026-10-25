@@ -19,7 +19,9 @@ import { canOpenAdmin, useIdentity } from "@/lib/identity";
 const ADMIN_SECTIONS = [
   { label: "Run log", href: "/admin/runs" },
   { label: "Usage", href: "/admin/usage" },
+  { label: "Tickets", href: "/admin/tickets" },
   { label: "Budgets", href: "/admin/budgets" },
+  { label: "Tickets", href: "/admin/tickets" },
 ];
 
 export function AdminSections() {

@@ -83,6 +83,16 @@ export function createLiveClient(options: LiveClientOptions): ApiClient {
       get("/v1/runs", { ...pageQuery(params), agent_id: params.agentId }),
     getRun: (runId) => get(`/v1/runs/${encodeURIComponent(runId)}`),
     getUsage: (params = {}) => get("/v1/usage", { agent_id: params.agentId }),
+    listTickets: (params = {}) =>
+      get("/v1/tickets", {
+        ...pageQuery(params),
+        agent_id: params.agentId,
+        status: params.status,
+      }),
+    getTicket: (ticketId) => get(`/v1/tickets/${encodeURIComponent(ticketId)}`),
+    resolveTicket: (ticketId) => post(`/v1/tickets/${encodeURIComponent(ticketId)}/resolve`),
+    saveTicketAsTestCase: (ticketId, body) =>
+      post(`/v1/tickets/${encodeURIComponent(ticketId)}/save-as-test-case`, body),
     getBudget: (agentId) => get(`/v1/agents/${encodeURIComponent(agentId)}/budget`),
     approveSpend: (agentId, amount) =>
       post(

@@ -347,6 +347,69 @@ async function* decisionStream(
   yield { type: "run_finished", status: "completed" };
 }
 
+const failedFlags = new Set<string>();
+
+export interface FlagOptions extends StreamOptions {
+  /** Fail the first flag call for each answer, to exercise the error state;
+   * the retry then goes through. */
+  failFirstAttempt?: boolean;
+}
+
+/**
+ * Simulates the flag call (POST, owner:runtime, not built yet; no flag
+ * route or event exists in the contract). Like a real fetch it rejects if
+ * the request fails and resolves once the response stream opens. The stream
+ * is the immediate re-check run: run_started -> tool_call -> tool_result ->
+ * tokens -> message_complete -> run_finished(completed).
+ */
+// RUNTIME-PLACEHOLDER(#30): fakes the flag call (POST that files a ticket and streams the re-check). Replace with the live flag call in web/lib/api/live.ts; it should also create the ticket, which this mock does not.
+export async function mockFlagAnswer(
+  flaggedMessageId: string,
+  userText: string,
+  opts: FlagOptions = {}
+): Promise<AsyncIterable<StreamEvent>> {
+  const speed = opts.speed ?? 1;
+  const delay = (ms: number) => wait(ms * speed);
+
+  await delay(600);
+  if (opts.failFirstAttempt && !failedFlags.has(flaggedMessageId)) {
+    failedFlags.add(flaggedMessageId);
+    throw new Error("network_error");
+  }
+  return recheckStream(userText, delay);
+}
+
+// RUNTIME-PLACEHOLDER(#30): scripted re-check events (canned answer built from the question). Replace with the SSE stream of the real re-check run.
+async function* recheckStream(
+  userText: string,
+  delay: (ms: number) => Promise<void>
+): AsyncGenerator<StreamEvent> {
+  const answer = pickAnswer(userText);
+  yield { type: "run_started", run_id: nextId("run") };
+  await delay(120);
+
+  yield { type: "tool_call", name: "search_filings", input: { query: userText } };
+  await delay(answer.toolSeconds * 120);
+  yield {
+    type: "tool_result",
+    name: "search_filings",
+    output: {
+      duration_ms: Math.round(answer.toolSeconds * 1000),
+      citations: answer.citations,
+    },
+  };
+  await delay(60);
+
+  const text = `I checked this against the filing again. ${answer.finalText} The figures match the cited pages.`;
+  for (const tok of tokenize(text)) {
+    yield { type: "token", text: tok };
+    await delay(18);
+  }
+  await delay(100);
+  yield { type: "message_complete", text };
+  yield { type: "run_finished", status: "completed" };
+}
+
 export interface StreamOptions {
   /** Real timers slow Playwright down; tests pass a small multiplier. */
   speed?: number;
