@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 import yaml
+from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 
 from hack_tx_2026 import agent_runtime, checkpointer, connectors, gateway, seams
@@ -22,10 +23,19 @@ ADMIN = {"X-User-Id": "usr_admin"}
 BUILDER = {"X-User-Id": "usr_builder"}
 END_USER = {"X-User-Id": "usr_end_user"}
 
+# LangGraph's tables, created by PostgresSaver.setup() rather than Base.metadata.
+CHECKPOINT_TABLES = [
+    "checkpoints",
+    "checkpoint_blobs",
+    "checkpoint_writes",
+    "checkpoint_migrations",
+]
+
 
 @pytest.fixture
 def runtime_db(test_engine, client, monkeypatch) -> Iterator[None]:
-    """Points the runtime, the seams and thread memory at the test database."""
+    """Points the runtime, the seams and thread memory at the test database.
+    Drops the checkpoint tables afterwards, so every test starts clean."""
     factory = sessionmaker(bind=test_engine, autoflush=False, autocommit=False)
     monkeypatch.setattr(seams, "SessionLocal", factory)
     monkeypatch.setattr(agent_runtime, "SessionLocal", factory)
@@ -34,6 +44,9 @@ def runtime_db(test_engine, client, monkeypatch) -> Iterator[None]:
     yield
     checkpointer.set_checkpointer(None)
     saver.close()
+    with test_engine.begin() as conn:
+        for table in CHECKPOINT_TABLES:
+            conn.execute(text(f'DROP TABLE IF EXISTS "{table}"'))
 
 
 @pytest.fixture
