@@ -13,7 +13,7 @@ If these docs disagree with a ticket, stop and flag it on the ticket instead of 
 
 - Backend: Python, FastAPI, LangGraph, Postgres, managed with `uv`
 - Frontend: Next.js, TypeScript, Tailwind, shadcn/ui, in `web/`
-- Models: Meta Model API, always called through our wrapper that meters tokens and cost
+- Models: Gemini API (`gemini/gemini-3.8-flash` through LiteLLM), always called through our wrapper that meters tokens and cost
 - Monitoring: Postgres run log, plus Langfuse (stretch)
 - Local services: Postgres via `docker compose`
 
