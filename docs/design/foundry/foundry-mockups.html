@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Foundry theme mockups</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --canvas:#0E1012; --s1:#16191D; --s2:#1F2329; --s3:#2A2F36;
+  --t1:#ECEEF0; --t2:#A8AEB6; --t3:#7C838C; --t4:#555B63;
+  --b-sub:rgba(255,255,255,.07); --b:rgba(255,255,255,.10); --b-strong:rgba(255,255,255,.18);
+  --molten:#F08A24; --molten-l:#FFB15C; --molten-d:#B85A10;
+  --ok:#3DD68C; --warn:#E8C547; --err:#F26D6D; --info:#5AA9F5;
+  --steel:linear-gradient(180deg,#F2F4F6 0%,#C9CED4 55%,#A3AAB2 100%);
+  --serif:'IBM Plex Serif',Georgia,serif; --sans:'Geist',system-ui,sans-serif; --mono:'Geist Mono',ui-monospace,monospace;
+}
+*{box-sizing:border-box;margin:0}
+body{background:#050607;color:var(--t1);font-family:var(--sans);-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;align-items:center;gap:48px;padding:0}
+.screen{width:1280px;position:relative;overflow:hidden;background-color:var(--canvas);
+  background-image:repeating-linear-gradient(90deg,rgba(255,255,255,.011) 0 1px,transparent 1px 3px);}
+.glow{position:absolute;left:0;right:0;top:-60px;height:520px;pointer-events:none;
+  background:radial-gradient(55% 60% at 70% 30%,rgba(240,138,36,.22),rgba(184,90,16,.07) 45%,transparent 72%)}
+.overline,.mono{font-family:var(--mono);text-transform:uppercase;letter-spacing:.12em;font-size:11px;font-weight:500}
+.amber{color:var(--molten-l)}
+h1,h2,h3,.serif{font-family:var(--serif);font-weight:500;letter-spacing:-.02em}
+
+/* nav */
+nav.top{position:relative;height:72px;display:flex;align-items:center;justify-content:space-between;padding:0 48px;border-bottom:1px solid var(--b-sub)}
+.word{display:flex;align-items:center;gap:10px;font-family:var(--serif);font-weight:600;font-size:15px;letter-spacing:.18em;text-transform:uppercase}
+.spark{width:8px;height:8px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#FFD9A6,var(--molten) 55%,var(--molten-d));box-shadow:0 0 10px 2px rgba(240,138,36,.55)}
+.pills{display:inline-flex;padding:4px;gap:2px;border-radius:999px;background:var(--s1);border:1px solid var(--b);box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+.pills span{padding:7px 16px;border-radius:999px;font-size:13px;font-weight:500;color:var(--t2)}
+.pills span.on{background:var(--s3);color:var(--t1);box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 0 0 1px rgba(255,255,255,.04)}
+.pills span.on.role{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -2px 0 var(--molten)}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 18px;border-radius:999px;font-size:13px;font-weight:600;border:1px solid transparent;white-space:nowrap}
+.btn.steel{background:var(--steel);color:#0E1012;box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 1px 2px rgba(0,0,0,.5),0 6px 16px -8px rgba(0,0,0,.8)}
+.btn.ghost{background:transparent;color:var(--t2);border-color:var(--b)}
+.btn.link{padding:0 6px;color:var(--molten-l);font-weight:500}
+.btn.sm{height:30px;padding:0 14px;font-size:12px}
+.btn.molten{background:linear-gradient(180deg,#FFB15C,#F08A24 55%,#D9731A);color:#1A0E02;box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 6px 18px -8px rgba(240,138,36,.7)}
+.btn.off{background:var(--s2);color:var(--t4);box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+
+/* plate */
+.plate{background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,0) 40%),var(--s1);border:1px solid var(--b);border-radius:12px;box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 8px 24px -12px rgba(0,0,0,.7)}
+.badge{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px;border-radius:999px;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;font-weight:500;border:1px solid}
+.badge.ok{color:var(--ok);border-color:rgba(61,214,140,.3);background:rgba(61,214,140,.08)}
+.badge.warn{color:var(--warn);border-color:rgba(232,197,71,.35);background:rgba(232,197,71,.09)}
+.badge.err{color:var(--err);border-color:rgba(242,109,109,.35);background:rgba(242,109,109,.09)}
+.badge.dot::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor}
+.tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--t2);padding:3px 8px;border-radius:5px;background:var(--s2);border:1px solid var(--b-sub)}
+
+/* ---------- catalog ---------- */
+.hero{position:relative;padding:56px 48px 28px}
+.hero h1{font-size:46px;line-height:1.08;margin-top:16px;color:var(--t1)}
+.hero h1 em{font-style:normal;color:var(--t3)}
+.hero p.lead{margin-top:18px;max-width:520px;color:var(--t2);font-size:15px;line-height:1.6}
+.toolbar{display:flex;align-items:center;gap:12px;margin-top:34px}
+.search{flex:1;height:40px;border-radius:999px;border:1px solid var(--b);background:var(--s1);padding:0 18px;display:flex;align-items:center;color:var(--t3);font-size:13px;box-shadow:inset 0 1px 2px rgba(0,0,0,.5)}
+.chip{height:32px;display:inline-flex;align-items:center;padding:0 14px;border-radius:999px;border:1px solid var(--b);font-size:12.5px;color:var(--t2);font-weight:500}
+.chip.on{background:var(--s3);color:var(--t1);border-color:rgba(240,138,36,.55);box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+.grid{position:relative;display:grid;grid-template-columns:repeat(3,1fr);gap:20px;padding:12px 48px 56px}
+.card{padding:22px;display:flex;flex-direction:column;gap:12px}
+.card .row{display:flex;justify-content:space-between;align-items:flex-start}
+.ico{width:40px;height:40px;border-radius:9px;border:1px solid rgba(240,138,36,.35);background:linear-gradient(180deg,rgba(240,138,36,.18),rgba(240,138,36,.06));display:flex;align-items:center;justify-content:center;color:var(--molten-l)}
+.ico svg{width:18px;height:18px}
+.card h3{font-size:19px;color:var(--t1)}
+.card p{font-size:13.5px;line-height:1.55;color:var(--t2);min-height:42px}
+.card .tags{display:flex;gap:6px;flex-wrap:wrap}
+.card .acts{display:flex;gap:8px;align-items:center;margin-top:4px}
+.card.new{border-style:dashed;border-color:var(--b-strong);background:transparent;box-shadow:none;justify-content:center}
+
+/* ---------- chat ---------- */
+.chatwrap{display:grid;grid-template-columns:260px 1fr;min-height:740px}
+aside.side{border-right:1px solid var(--b-sub);padding:24px 18px;background:rgba(22,25,29,.5);display:flex;flex-direction:column;gap:16px}
+aside .back{font-size:12.5px;color:var(--molten-l)}
+aside h2{font-size:22px}
+aside .own{font-size:12px;color:var(--t3);margin-top:2px}
+.chatitem{padding:10px 12px;border-radius:9px;font-size:13px;color:var(--t2)}
+.chatitem small{display:block;font-size:11px;color:var(--t3);margin-top:2px}
+.chatitem.on{background:var(--s2);color:var(--t1);border:1px solid var(--b);border-left:2px solid var(--molten);box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
+.thread{position:relative;padding:36px 64px 28px;display:flex;flex-direction:column;gap:20px}
+.bubble{align-self:flex-end;max-width:62%;padding:12px 18px;border-radius:16px 16px 4px 16px;background:linear-gradient(180deg,#FFB15C,#F08A24 60%,#D9731A);color:#1A0E02;font-size:14px;font-weight:500;box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 8px 20px -10px rgba(240,138,36,.6)}
+.ans{max-width:640px;font-size:14.5px;line-height:1.65;color:var(--t1);display:flex;flex-direction:column;gap:10px}
+.step{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--t3);display:flex;align-items:center;gap:8px}
+.step b{color:var(--ok);font-weight:500}
+.cite{display:inline-flex;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--molten-l);padding:3px 9px;border-radius:999px;border:1px solid rgba(240,138,36,.35);background:rgba(240,138,36,.08)}
+.flagrow{display:flex;gap:8px;align-items:center}
+.appr{max-width:640px;padding:24px;border-color:rgba(240,138,36,.35);box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 0 0 1px rgba(240,138,36,.06),0 14px 40px -16px rgba(240,138,36,.25)}
+.appr h3{font-size:24px;margin:10px 0 8px}
+.appr .d{color:var(--t2);font-size:13.5px;line-height:1.6}
+pre.code{margin-top:16px;padding:14px 16px;border-radius:8px;background:#0A0B0D;border:1px solid var(--b-sub);font-family:var(--mono);font-size:12px;line-height:1.75;color:var(--t2);box-shadow:inset 0 2px 6px rgba(0,0,0,.5)}
+pre.code i{font-style:normal;color:var(--molten-l)}
+.appr .foot{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;padding-top:18px;border-top:1px solid var(--b-sub)}
+.composer{margin-top:auto;display:flex;gap:12px;padding-top:24px}
+.composer .search{height:46px}
+
+/* ---------- budget ---------- */
+.hero.admin h1{font-size:42px}
+.statbar{display:grid;grid-template-columns:repeat(4,1fr);margin:0 48px;position:relative}
+.stat{padding:20px 24px;border-right:1px solid var(--b-sub)}
+.stat:last-child{border:0}
+.stat .n{font-family:var(--mono);font-size:30px;font-weight:500;letter-spacing:-.02em;margin-bottom:6px}
+.stat .l{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--t3)}
+.two{position:relative;display:grid;grid-template-columns:1.35fr 1fr;gap:20px;padding:20px 48px 56px}
+.panel{padding:24px}
+.panel .ph{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.panel h3{font-size:21px}
+.brow{display:grid;grid-template-columns:1fr 180px 112px;gap:20px;align-items:center;padding:16px 0;border-top:1px solid var(--b-sub)}
+.brow.first{border-top:0}
+.brow .nm{font-size:14.5px;font-weight:500}
+.brow .sub{white-space:nowrap;font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--t3);margin-top:4px;text-transform:uppercase}
+.meter{position:relative;height:8px;border-radius:2px;background:#0A0B0D;border:1px solid var(--b-sub);box-shadow:inset 0 1px 2px rgba(0,0,0,.7)}
+.meter i{position:absolute;left:0;top:0;bottom:0;border-radius:1px}
+.meter .tick{position:absolute;top:-4px;bottom:-4px;width:1px;background:var(--t3)}
+.meter.warn i{width:82%;background:linear-gradient(90deg,#B8962A,var(--warn));box-shadow:0 0 10px rgba(232,197,71,.35)}
+.meter.ok i{background:linear-gradient(90deg,var(--molten-d),var(--molten))}
+.meter.full i{width:100%;background:repeating-linear-gradient(135deg,var(--err) 0 6px,#a84444 6px 12px)}
+.req{padding:14px 0;border-top:1px solid var(--b-sub)}
+.req.first{border-top:0}
+.req .nm{font-size:14px;font-weight:500}
+.req .sub{font-size:12px;color:var(--t3);margin:3px 0 10px}
+.pausedbox{margin:2px 0 6px;padding:16px;border-radius:10px;border:1px solid rgba(242,109,109,.28);background:linear-gradient(180deg,rgba(242,109,109,.07),rgba(242,109,109,.02))}
+.pausedbox p{font-size:13px;color:var(--t2);line-height:1.55}
+.cap{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--t3)}
+</style>
+</head>
+<body>
+
+<!-- ======================= (a) CATALOG ======================= -->
+<section class="screen" id="catalog">
+  <div class="glow"></div>
+  <nav class="top">
+    <div class="word"><span class="spark"></span>Foundry</div>
+    <div class="pills"><span class="on">Catalog</span><span>Build</span><span>Admin</span></div>
+    <div class="pills"><span>Admin</span><span>Builder</span><span class="on role">End user</span></div>
+  </nav>
+  <div class="hero">
+    <p class="overline amber">Agent catalog</p>
+    <h1>Find an agent and ask it.<br><em>Every answer cited.</em></h1>
+    <p class="lead">Every agent here was forged, tested and signed off before it went live, and runs inside a budget. Anyone on the team can open one or copy it.</p>
+    <div class="toolbar">
+      <div class="search">Search agents</div>
+      <span class="chip on">All</span><span class="chip">Finance</span><span class="chip">Policy</span><span class="chip">Engineering</span>
+      <span class="btn steel">Build an agent</span>
+    </div>
+  </div>
+  <div class="grid">
+    <article class="plate card">
+      <div class="row"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/></svg></div><span class="badge ok dot">Live</span></div>
+      <h3>Filings Analyst</h3><p>Answers questions about company filings and cites the page.</p>
+      <div class="tags"><span class="tag">Built with CLI</span><span class="tag">Owner: Priya</span></div>
+      <div class="acts"><span class="btn steel sm">Open chat</span><span class="btn link sm">Copy agent</span></div>
+    </article>
+    <article class="plate card">
+      <div class="row"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg></div><span class="badge ok dot">Live</span></div>
+      <h3>Policy Assistant</h3><p>Finds the internal policy that applies and quotes the clause.</p>
+      <div class="tags"><span class="tag">Built with form</span><span class="tag">Owner: Dana</span></div>
+      <div class="acts"><span class="btn steel sm">Open chat</span><span class="btn link sm">Copy agent</span></div>
+    </article>
+    <article class="plate card">
+      <div class="row"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></div><span class="badge warn dot">80% budget</span></div>
+      <h3>Market Summary</h3><p>Summarizes the morning's moves with a source for each number.</p>
+      <div class="tags"><span class="tag">Built with CLI</span><span class="tag">Owner: Marcus</span></div>
+      <div class="acts"><span class="btn steel sm">Open chat</span><span class="btn link sm">Copy agent</span></div>
+    </article>
+    <article class="plate card">
+      <div class="row"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="12" r="2"/><path d="M6 8v8M8 6h4a4 4 0 014 4"/></svg></div><span class="badge ok dot">Live</span></div>
+      <h3>PR Reviewer</h3><p>Reads a pull request and files a Jira issue for each problem, after you approve.</p>
+      <div class="tags"><span class="tag">Built with CLI</span><span class="tag">Owner: Priya</span></div>
+      <div class="acts"><span class="btn steel sm">Open chat</span><span class="btn link sm">Copy agent</span></div>
+    </article>
+    <article class="plate card">
+      <div class="row"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 6h16M4 12h16M4 18h10"/></svg></div><span class="badge ok dot">Live</span></div>
+      <h3>Campaign Copy Reviewer</h3><p>Checks marketing copy against compliance wording rules.</p>
+      <div class="tags"><span class="tag">Built with form</span><span class="tag">Owner: Dena</span></div>
+      <div class="acts"><span class="btn steel sm">Open chat</span><span class="btn link sm">Copy agent</span></div>
+    </article>
+    <article class="plate card new">
+      <h3>Need one that is not here?</h3><p style="min-height:0">Describe it in a sentence and the setup assistant will forge it from there.</p>
+      <div class="acts"><span class="btn ghost sm">Start a build</span></div>
+    </article>
+  </div>
+</section>
+
+<!-- ======================= (b) CHAT ======================= -->
+<section class="screen" id="chat">
+  <div class="glow" style="opacity:.8"></div>
+  <nav class="top">
+    <div class="word"><span class="spark"></span>Foundry</div>
+    <div class="pills"><span class="on">Catalog</span><span>Build</span><span>Admin</span></div>
+    <div class="pills"><span>Admin</span><span>Builder</span><span class="on role">End user</span></div>
+  </nav>
+  <div class="chatwrap">
+    <aside class="side">
+      <div class="back">&larr; All agents</div>
+      <div><h2>PR Reviewer</h2><div class="own">Owner: Priya</div></div>
+      <span class="btn ghost" style="justify-content:center;width:100%">+ New chat</span>
+      <div class="overline amber" style="margin-top:6px">Your chats</div>
+      <div class="chatitem on">Review PR 128<small>Today</small></div>
+      <div class="chatitem">Review PR 121<small>Tue</small></div>
+      <div class="chatitem">Review PR 117<small>Mon</small></div>
+    </aside>
+    <div class="thread">
+      <div class="bubble">Review PR 128 and file an issue for anything that needs fixing.</div>
+      <div class="ans">
+        <div class="step"><b>&#10003;</b> Read pull request (0.9s)</div>
+        <div>I found one problem. The retry loop in <span class="mono" style="font-size:12.5px;letter-spacing:.02em;text-transform:none;color:var(--molten-l)">sync.py</span> has no upper limit, so a failing call retries forever. Under load that would exhaust the worker pool.</div>
+        <div style="display:flex;gap:6px"><span class="cite">PR 128 &middot; sync.py:84</span><span class="cite">PR 128 &middot; sync.py:91</span></div>
+        <div class="flagrow">
+          <span class="btn ghost sm">&#9873; Flag</span><span class="btn link sm" style="color:var(--t2)">Copy</span>
+        </div>
+      </div>
+      <div class="plate appr">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span class="overline amber">Approval needed</span><span class="badge warn dot">Run paused</span>
+        </div>
+        <h3>Create a Jira issue?</h3>
+        <p class="d">PR Reviewer wants to run a tool that changes something outside this chat. Nothing happens until you decide.</p>
+        <pre class="code"><i>jira.create_issue</i>
+project: PAY
+type:    Bug
+title:   Unbounded retry loop in sync.py
+link:    PR 128</pre>
+        <div class="foot"><span class="btn ghost">Reject</span><span class="btn molten">Approve and create</span></div>
+        <p style="font-size:12px;color:var(--t3);margin-top:12px;text-align:right">If you reject, the agent is told this was declined and carries on without it.</p>
+      </div>
+      <div class="composer"><div class="search">Waiting for your decision</div><span class="btn off" style="height:46px;padding:0 26px">Send</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= (c) BUDGET ======================= -->
+<section class="screen" id="budget">
+  <div class="glow"></div>
+  <nav class="top">
+    <div class="word"><span class="spark"></span>Foundry</div>
+    <div class="pills"><span>Catalog</span><span>Build</span><span class="on">Admin</span></div>
+    <div class="pills"><span class="on role">Admin</span><span>Builder</span><span>End user</span></div>
+  </nav>
+  <div class="hero admin">
+    <p class="overline amber">Admin</p>
+    <h1>Four things need you.<br><em>Everything else is running.</em></h1>
+  </div>
+  <div class="plate statbar">
+    <div class="stat"><div class="n">5</div><div class="l">Agents live</div></div>
+    <div class="stat"><div class="n">$187.40</div><div class="l">Spent this month</div></div>
+    <div class="stat"><div class="n" style="color:var(--err)">1</div><div class="l">Agent paused at cap</div></div>
+    <div class="stat"><div class="n">3</div><div class="l">Open flag tickets</div></div>
+  </div>
+  <div class="two">
+    <div class="plate panel">
+      <div class="ph"><h3>Budgets</h3><span class="overline" style="color:var(--t3)">This month</span></div>
+      <div class="brow first">
+        <div><div class="nm">Market Summary</div><div class="sub">$50.00 of $50.00 &middot; chats paused</div></div>
+        <div class="meter full"><i></i></div>
+        <span class="badge err dot">Paused</span>
+      </div>
+      <div class="pausedbox">
+        <div class="overline" style="color:var(--err);margin-bottom:8px">Cap reached &middot; spend approval needed</div>
+        <p>Market Summary hit its $50.00 monthly cap at 09:42. Approving lets it run on the cheaper model for up to $10.00 more, and resumes the 2 paused chats where they stopped.</p>
+        <div style="display:flex;gap:10px;margin-top:14px"><span class="btn molten">Approve spend and continue</span><span class="btn ghost">Keep paused</span></div>
+      </div>
+      <div class="brow">
+        <div><div class="nm">Filings Analyst</div><div class="sub">$41.20 of $50.00 &middot; cheaper model at 100%</div></div>
+        <div class="meter warn"><span class="tick" style="left:80%"></span><i></i></div>
+        <span class="badge warn dot">82% warning</span>
+      </div>
+      <div class="brow">
+        <div><div class="nm">PR Reviewer</div><div class="sub">$22.10 of $60.00</div></div>
+        <div class="meter ok"><i style="width:37%"></i></div>
+        <span class="badge ok dot">On track</span>
+      </div>
+      <div class="brow">
+        <div><div class="nm">Policy Assistant</div><div class="sub">$9.80 of $40.00</div></div>
+        <div class="meter ok"><i style="width:24%"></i></div>
+        <span class="badge ok dot">On track</span>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:20px">
+      <div class="plate panel">
+        <div class="ph"><h3>Connector requests</h3></div>
+        <div class="req first"><div class="nm">Style guide wiki</div><div class="sub">Campaign Copy Reviewer &middot; read only</div><div style="display:flex;gap:8px"><span class="btn steel sm">Approve</span><span class="btn ghost sm">Deny</span></div></div>
+        <div class="req"><div class="nm">GitHub</div><div class="sub">PR Reviewer &middot; read pull requests</div><div style="display:flex;gap:8px"><span class="btn steel sm">Approve</span><span class="btn ghost sm">Deny</span></div></div>
+      </div>
+      <div class="plate panel">
+        <div class="ph"><h3>Blocked deploy</h3><span class="badge err">Score 0.78</span></div>
+        <p style="font-size:13.5px;color:var(--t2);line-height:1.6">Policy Assistant v5 scored 0.78 and needs 0.85. Overriding records your reason in the run log.</p>
+        <div class="cap" style="margin:16px 0 8px">Reason for override</div>
+        <div class="search" style="height:40px;border-radius:8px">Required</div>
+        <div style="display:flex;gap:10px;margin-top:14px;align-items:center"><span class="btn ghost sm">Override and deploy</span><span class="btn link sm" style="color:var(--t2)">Leave blocked</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+</body>
+</html>

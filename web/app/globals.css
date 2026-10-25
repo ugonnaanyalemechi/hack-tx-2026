@@ -5,41 +5,50 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Nocturne design system tokens, mapped into Tailwind v4's @theme so every
+ * Foundry design system tokens, mapped into Tailwind v4's @theme so every
  * component can use real utility classes (bg-surface-1, text-text-secondary,
  * rounded-pill, shadow-e2, ...) instead of inline styles or magic hex/px
  * values. See docs/design-system.md for the source of truth. This is a
  * fixed dark-only product (no light theme), so these values are the only
  * palette the app has.
+ *
+ * Note: the --color-primary-* scale is the single "molten" forge amber
+ * accent. The names are kept from the previous theme so components keep
+ * working; the values are what changed.
  */
 @theme inline {
-  /* Typography: Geist / Geist Mono, self-hosted via next/font in layout.tsx */
+  /* Typography: IBM Plex Serif for headings, Geist for body and Geist Mono
+   * for overlines, labels, data and numbers. All three are self-hosted via
+   * next/font in layout.tsx. */
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
     "Segoe UI", sans-serif;
+  --font-serif: var(--font-plex-serif), ui-serif, Georgia, "Times New Roman",
+    serif;
   --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo,
     monospace;
 
-  /* type.overline: Geist Mono, uppercase, above section titles / table
-   * headers (docs/design-system.md §3). Not on the default Tailwind type
-   * scale, so it gets its own named token instead of a one-off text-[11px]. */
+  /* type.overline: Geist Mono, uppercase, wide tracking, above section
+   * titles / table headers / labels (docs/design-system.md §3). */
   --text-overline: 11px;
   --text-overline--line-height: 1.2;
-  --tracking-overline: 0.08em;
+  --tracking-overline: 0.12em;
+  /* Wordmark: Plex Serif caps. */
+  --tracking-wordmark: 0.18em;
 
   /* Type scale (docs/design-system.md §3). H1 steps down to 32px below
    * 768px, so it has a mobile size too: `text-h1-sm md:text-h1`. */
   --text-h1: 44px;
   --text-h1--line-height: 1.1;
-  --text-h1--letter-spacing: -0.025em;
-  --text-h1--font-weight: 600;
+  --text-h1--letter-spacing: -0.02em;
+  --text-h1--font-weight: 500;
   --text-h1-sm: 32px;
   --text-h1-sm--line-height: 1.1;
-  --text-h1-sm--letter-spacing: -0.025em;
-  --text-h1-sm--font-weight: 600;
+  --text-h1-sm--letter-spacing: -0.02em;
+  --text-h1-sm--font-weight: 500;
   --text-h3: 24px;
   --text-h3--line-height: 1.25;
   --text-h3--letter-spacing: -0.015em;
-  --text-h3--font-weight: 600;
+  --text-h3--font-weight: 500;
   --text-h4: 18px;
   --text-h4--line-height: 1.35;
   --text-h4--letter-spacing: -0.01em;
@@ -53,7 +62,7 @@
   --text-body-l--letter-spacing: -0.005em;
 
   /* Motion (§6): every transition is 160ms on this curve. */
-  --ease-nocturne: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-foundry: cubic-bezier(0.2, 0.8, 0.2, 1);
 
   /* Containers (§4): max-w-wide for nav and full-bleed rows, max-w-content
    * for page content, max-w-measure for body copy. */
@@ -61,82 +70,85 @@
   --container-content: 1200px;
   --container-measure: 560px;
 
-  /* Radius: pills act, rectangles hold (P3) */
-  --radius-xs: 6px;
-  --radius-sm: 10px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
-  --radius-2xl: 28px;
+  /* Radius: pills act, machined plates hold (tight 8-12px, P3) */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
   --radius-pill: 999px;
 
-  /* Elevation */
-  --shadow-e1: inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 1px 2px rgba(0, 0, 0, 0.4);
+  /* Elevation: a 1px top-edge highlight like a machined plate */
+  --shadow-e1: inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 1px 2px rgba(0, 0, 0, 0.5);
   --shadow-e2: inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 8px 24px -8px rgba(0, 0, 0, 0.6);
+    0 8px 24px -8px rgba(0, 0, 0, 0.7);
 
-  /* Brand: cobalt, platinum, aurora */
-  --color-primary-300: #8c98ff;
-  --color-primary-400: #6474fa;
-  --color-primary-500: #4255f5;
-  --color-primary-600: #2f3fd6;
-  --color-primary-700: #1e2690;
+  /* Brand: molten forge amber (the single accent) */
+  --color-primary-300: #ffb15c;
+  --color-primary-400: #f79d3e;
+  --color-primary-500: #f08a24;
+  --color-primary-600: #d9731a;
+  --color-primary-700: #b85a10;
 
-  --color-secondary-100: #eceef3;
-  --color-secondary-200: #dadde6;
-  --color-secondary-300: #c7cbd6;
-  --color-secondary-400: #9aa0b2;
-  --color-secondary-500: #6e7488;
+  /* Secondary: cool brushed steel */
+  --color-secondary-100: #eef0f2;
+  --color-secondary-200: #d8dce0;
+  --color-secondary-300: #c2c7cd;
+  --color-secondary-400: #9aa1a9;
+  --color-secondary-500: #6f767f;
 
-  --color-accent-200: #ddd3fe;
-  --color-accent-300: #c4b2fc;
-  --color-accent-400: #a78bfa;
-  --color-accent-500: #8b67f0;
-  --color-accent-600: #6d48d4;
+  /* Accent aliases the molten scale: Foundry has one accent, not two. */
+  --color-accent-200: #ffd9a6;
+  --color-accent-300: #ffb15c;
+  --color-accent-400: #f79d3e;
+  --color-accent-500: #f08a24;
+  --color-accent-600: #b85a10;
 
-  /* Neutral scale */
-  --color-neutral-50: #f5f6fa;
-  --color-neutral-100: #e8eaf2;
-  --color-neutral-200: #cdd1e0;
-  --color-neutral-300: #a9aec4;
-  --color-neutral-400: #7f85a0;
-  --color-neutral-500: #5c627d;
-  --color-neutral-600: #424760;
-  --color-neutral-700: #2d3148;
-  --color-neutral-800: #1a1d2e;
-  --color-neutral-900: #0e1020;
-  --color-neutral-950: #07080f;
+  /* Neutral scale: cool steel gray, hue ~210 */
+  --color-neutral-50: #f3f5f6;
+  --color-neutral-100: #eceef0;
+  --color-neutral-200: #d2d6da;
+  --color-neutral-300: #a8aeb6;
+  --color-neutral-400: #7c838c;
+  --color-neutral-500: #5a6068;
+  --color-neutral-600: #3e444b;
+  --color-neutral-700: #2a2f36;
+  --color-neutral-800: #1f2329;
+  --color-neutral-900: #16191d;
+  --color-neutral-950: #0e1012;
 
-  /* Background & surfaces */
-  --color-canvas: #07080f;
-  --color-surface-1: #0e1020;
-  --color-surface-2: #1a1d2e;
+  /* Background & surfaces: gunmetal ground, steel plates */
+  --color-canvas: #0e1012;
+  --color-surface-1: #16191d;
+  --color-surface-2: #1f2329;
+  --color-surface-3: #2a2f36;
   --color-surface-glass: rgba(255, 255, 255, 0.04);
-  --color-surface-overlay: rgba(18, 20, 42, 0.85);
-  --color-surface-scrim: rgba(5, 6, 11, 0.72);
+  --color-surface-overlay: rgba(22, 25, 29, 0.88);
+  --color-surface-scrim: rgba(5, 7, 8, 0.72);
 
   /* Text */
-  --color-text-primary: #f5f6fa;
-  --color-text-secondary: #a9aec4;
-  --color-text-muted: #7f85a0;
-  --color-text-disabled: #5c627d;
-  --color-text-brand: #8c98ff;
-  --color-text-inverse: #07080f;
+  --color-text-primary: #eceef0;
+  --color-text-secondary: #a8aeb6;
+  --color-text-muted: #7c838c;
+  --color-text-disabled: #555b63;
+  --color-text-brand: #ffb15c;
+  --color-text-inverse: #0e1012;
 
-  /* Borders */
-  --color-border-subtle: rgba(255, 255, 255, 0.08);
-  --color-border-default: rgba(255, 255, 255, 0.12);
-  --color-border-strong: rgba(255, 255, 255, 0.2);
-  --color-border-focus: #6474fa;
+  /* Borders: hairlines */
+  --color-border-subtle: rgba(255, 255, 255, 0.07);
+  --color-border-default: rgba(255, 255, 255, 0.1);
+  --color-border-strong: rgba(255, 255, 255, 0.18);
+  --color-border-focus: #f08a24;
 
-  /* Semantic */
+  /* Semantic. Warning is yellow so it never reads as the amber accent. */
   --color-success: #3dd68c;
-  --color-warning: #f5b544;
+  --color-warning: #e8c547;
   --color-error: #f26d6d;
   --color-info: #5aa9f5;
 
-  /* shadcn/ui semantic aliases, mapped onto the Nocturne palette above so
+  /* shadcn/ui semantic aliases, mapped onto the Foundry palette above so
    * every installed primitive (Button, Input, Badge, Avatar, ...) renders
    * in-theme with zero per-component overrides. */
   --color-background: var(--color-canvas);
@@ -167,26 +179,70 @@
   --color-sidebar-border: var(--color-border-default);
   --color-sidebar-ring: var(--color-border-focus);
 
-  --color-chart-1: var(--color-primary-400);
+  --color-chart-1: var(--color-primary-500);
   --color-chart-2: var(--color-secondary-300);
-  --color-chart-3: var(--color-accent-400);
+  --color-chart-3: var(--color-secondary-500);
   --color-chart-4: var(--color-success);
   --color-chart-5: var(--color-info);
 }
 
-/* gradient.glow (§5): the single cobalt light behind a view's hero. One
+/* gradient.glow (§5): the single warm ember light behind a view's hero. One
  * per view. */
 @utility bg-glow {
   background-image: radial-gradient(
     60% 55% at 65% 40%,
-    rgba(66, 85, 245, 0.55),
-    rgba(66, 85, 245, 0) 70%
+    rgba(240, 138, 36, 0.4),
+    rgba(184, 90, 16, 0.12) 45%,
+    rgba(184, 90, 16, 0) 72%
   );
 }
 
-/* gradient.cobalt (§5): brand objects such as the logo tile. */
-@utility bg-cobalt {
-  background-image: linear-gradient(135deg, #5468f5 0%, #2f3fd6 55%, #1e2690 100%);
+/* gradient.steel (§5): the brushed-steel primary action. Dark label, inset
+ * top highlight. */
+@utility bg-steel {
+  background-image: linear-gradient(
+    180deg,
+    #f2f4f6 0%,
+    #c9ced4 55%,
+    #a3aab2 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* gradient.molten (§5): the amber action for decisions that spend or change
+ * something (approve). Dark label. */
+@utility bg-molten {
+  background-image: linear-gradient(
+    180deg,
+    #ffb15c 0%,
+    #f08a24 55%,
+    #d9731a 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 6px 18px -8px rgba(240, 138, 36, 0.7);
+}
+
+/* gradient.plate (§5): a faint top-lit sheen for cards. */
+@utility bg-plate {
+  background-image: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.025),
+    rgba(255, 255, 255, 0) 40%
+  );
+}
+
+/* The forge spark beside the wordmark: a small lit ember. */
+@utility bg-spark {
+  background-image: radial-gradient(
+    circle at 35% 30%,
+    #ffd9a6,
+    #f08a24 55%,
+    #b85a10
+  );
+  box-shadow: 0 0 10px 2px rgba(240, 138, 36, 0.55);
 }
 
 @layer base {
@@ -195,8 +251,20 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* Very faint brushed-metal grain on the canvas (<=3% opacity). */
+    background-image: repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.011) 0 1px,
+      transparent 1px 3px
+    );
   }
   html {
     @apply font-sans;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-serif;
   }
 }

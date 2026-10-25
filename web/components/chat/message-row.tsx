@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Check, Copy, Flag, Loader2, RotateCcw } from "lucide-react";
+import { AlertTriangle, Check, Clock, Copy, Flag, Loader2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ApprovalCard } from "@/components/chat/approval-card";
@@ -21,7 +21,7 @@ function toolLabel(name: string, status: "running" | "done"): string {
 export function UserBubble({ text }: { text: string }) {
   return (
     <div className="flex justify-end">
-      <div className="max-w-[70%] rounded-2xl rounded-tr-sm bg-primary-500 px-4 py-2.5 text-sm text-neutral-50">
+      <div className="max-w-[70%] rounded-2xl rounded-tr-sm bg-molten px-4 py-2.5 text-sm font-medium text-text-inverse">
         {text}
       </div>
     </div>
@@ -59,7 +59,9 @@ export function AssistantMessage({
     <div className="flex flex-col gap-2">
       {message.toolNote ? (
         <div className="flex items-center gap-1.5 text-sm text-text-muted">
-          {message.toolNote.status === "running" ? (
+          {message.toolNote.status === "running" && message.paused ? (
+            <Clock className="size-3.5 text-warning" aria-hidden />
+          ) : message.toolNote.status === "running" ? (
             <Loader2 className="size-3.5 animate-spin text-text-muted" aria-hidden />
           ) : (
             <Check className="size-3.5 text-success" aria-hidden />
@@ -73,7 +75,7 @@ export function AssistantMessage({
         </div>
       ) : null}
 
-      {message.status === "error" && message.error ? (
+      {message.paused ? null : message.status === "error" && message.error ? (
         <div className="flex max-w-[75%] flex-col gap-3 rounded-2xl border border-error/30 bg-error/10 p-4">
           <div className="flex items-center gap-2 text-sm text-error">
             <AlertTriangle className="size-4 shrink-0" aria-hidden />

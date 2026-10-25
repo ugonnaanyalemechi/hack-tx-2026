@@ -10,6 +10,8 @@ interface ChatSidebarProps {
   chats: ChatSummary[];
   chatsState: "loading" | "error" | "ready";
   activeChatId: string | null;
+  /** The chat that stopped on the agent's budget, marked "Paused". */
+  pausedChatId?: string | null;
   onSelectChat: (chatId: string) => void;
   onNewChat: () => void;
   onRetryChats: () => void;
@@ -20,6 +22,7 @@ export function ChatSidebar({
   chats,
   chatsState,
   activeChatId,
+  pausedChatId = null,
   onSelectChat,
   onNewChat,
   onRetryChats,
@@ -44,7 +47,7 @@ export function ChatSidebar({
       <Button
         type="button"
         onClick={onNewChat}
-        className="h-10 w-full justify-center gap-1.5 rounded-pill bg-neutral-50 text-sm font-medium text-text-inverse hover:bg-white"
+        className="h-10 w-full justify-center gap-1.5 rounded-pill bg-steel text-sm font-medium text-text-inverse hover:brightness-110"
       >
         <Plus className="size-4" aria-hidden />
         New chat
@@ -59,6 +62,7 @@ export function ChatSidebar({
           chats={chats}
           chatsState={chatsState}
           activeChatId={activeChatId}
+          pausedChatId={pausedChatId}
           onSelectChat={onSelectChat}
           onRetryChats={onRetryChats}
         />
@@ -71,9 +75,11 @@ function ChatList({
   chats,
   chatsState,
   activeChatId,
+  pausedChatId,
   onSelectChat,
   onRetryChats,
 }: {
+  pausedChatId: string | null;
   chats: ChatSummary[];
   chatsState: "loading" | "error" | "ready";
   activeChatId: string | null;
@@ -133,8 +139,12 @@ function ChatList({
               <span className="truncate text-sm text-text-primary">
                 {chat.title}
               </span>
-              <span className="text-xs text-text-muted">
-                {chat.relativeLabel}
+              <span
+                className={`text-xs ${
+                  chat.id === pausedChatId ? "text-warning" : "text-text-muted"
+                }`}
+              >
+                {chat.id === pausedChatId ? "Paused" : chat.relativeLabel}
               </span>
             </button>
           </li>

@@ -1,16 +1,25 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useSearchParams } from "next/navigation";
 import { TopNav } from "@/components/chat/top-nav";
 import { ChatSidebar } from "@/components/chat/chat-sidebar";
 import { ChatThread } from "@/components/chat/chat-thread";
 import { Composer } from "@/components/chat/composer";
+import { BudgetPausedCard } from "@/components/budget/budget-paused-card";
+import { BudgetWarningBanner } from "@/components/budget/budget-warning-banner";
+import { ApiError } from "@/lib/api/client";
+import {
+  mockBudgetState,
+  mockSetSpendShare,
+  subscribeMockBudgets,
+} from "@/lib/api/mock-budgets";
 import {
   MOCK_AGENT,
   getSeedChats,
-  mockChatStream,
+  mockContinueRun,
   mockDecideApproval,
+  mockSendMessage,
 } from "@/lib/mock-chat";
 import type {
   ApprovalDecision,
@@ -33,6 +42,17 @@ function truncateTitle(text: string, max = 42): string {
   return trimmed.length > max ? `${trimmed.slice(0, max - 1)}…` : trimmed;
 }
 
+/** The run that stopped on the budget, so Continue can pick it up. */
+interface PausedRun {
+  chatId: string;
+  assistantId: string;
+  /** The user message the run was answering; null when unknown. */
+  userText: string | null;
+}
+
+/** Spend share the `?budget=` preview puts the mock agent at. */
+const BUDGET_PREVIEW_SHARE = { ok: 0.4, warned: 0.82, paused: 1 } as const;
+
 export default function ChatPage() {
   return (
     <Suspense fallback={<div className="flex-1 bg-canvas" />}>
@@ -49,6 +69,28 @@ function ChatPageInner() {
   // fast; the UI still goes through every real event in order.
   const streamSpeed = searchParams.get("fastStream") === "1" ? 0.05 : 1;
   const forceDecideError = searchParams.get("decideError") === "1";
+  const budgetPreview = searchParams.get("budget");
+
+  // The agent's budget state (never its cost) from the mock store, which
+  // follows the admin approving spend in another tab.
+  const budgetState = useSyncExternalStore(
+    subscribeMockBudgets,
+    () => mockBudgetState(MOCK_AGENT.id),
+    () => "ok" as const
+  );
+  const [pausedRun, setPausedRun] = useState<PausedRun | null>(null);
+  const [continuing, setContinuing] = useState(false);
+  const [continueNotice, setContinueNotice] = useState<{
+    kind: "waiting" | "error";
+    message: string;
+  } | null>(null);
+
+  // Preview/test hook: ?budget=ok|warned|paused sets the mock agent's spend.
+  useEffect(() => {
+    if (budgetPreview === "ok" || budgetPreview === "warned" || budgetPreview === "paused") {
+      mockSetSpendShare(MOCK_AGENT.id, BUDGET_PREVIEW_SHARE[budgetPreview]);
+    }
+  }, [budgetPreview]);
 
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [chatsState, setChatsState] = useState<"loading" | "error" | "ready">(
@@ -115,7 +157,8 @@ function ChatPageInner() {
   async function runStream(
     chatId: string,
     assistantId: string,
-    events: AsyncIterable<StreamEvent>
+    events: AsyncIterable<StreamEvent>,
+    userText: string | null = null
   ) {
     setIsStreaming(true);
     let preview = "";
@@ -186,7 +229,15 @@ function ChatPageInner() {
             }));
             break;
           case "budget_paused":
-            // Budget-pause UI is owned by the budget ladder ticket (#23).
+            // The run stopped on the budget. Keep what streamed so far and
+            // show the paused card; Continue resumes this message.
+            patchAssistantMessage(chatId, assistantId, (m) => ({
+              ...m,
+              preview: "",
+              paused: true,
+              status: "done",
+            }));
+            setPausedRun({ chatId, assistantId, userText });
             break;
         }
       }
@@ -234,11 +285,74 @@ function ChatPageInner() {
     });
     setActiveChatId(chatId);
 
-    void runStream(
-      chatId,
-      assistantMsg.id,
-      mockChatStream(text, { speed: streamSpeed })
-    );
+    void startRun(chatId, assistantMsg.id, text);
+  }
+
+  /** Sends the user's message and streams the answer. A 409 (the agent is
+   * paused, or an approval is pending) leaves the chat as it is. */
+  async function startRun(chatId: string, assistantId: string, userText: string) {
+    setIsStreaming(true);
+    let events: AsyncIterable<StreamEvent>;
+    try {
+      events = await mockSendMessage(MOCK_AGENT.id, userText, { speed: streamSpeed });
+    } catch (error) {
+      setIsStreaming(false);
+      const code = error instanceof ApiError ? error.code : "";
+      if (error instanceof ApiError && error.status === 409 && code === "budget_paused") {
+        // Nothing ran. The message stays, and Continue sends it once approved.
+        patchAssistantMessage(chatId, assistantId, { paused: true, status: "done" });
+        setPausedRun({ chatId, assistantId, userText });
+        return;
+      }
+      patchAssistantMessage(chatId, assistantId, {
+        status: "error",
+        error: {
+          code: code || "send_failed",
+          message:
+            error instanceof ApiError && error.status === 409
+              ? "An approval is waiting. Decide it first, then try again."
+              : "Couldn't send your message. Try again in a moment.",
+        },
+      });
+      return;
+    }
+    await runStream(chatId, assistantId, events, userText);
+  }
+
+  /** Continue after a pause: a 409 means no admin approval yet. */
+  async function handleContinue() {
+    setContinuing(true);
+    setContinueNotice(null);
+    const run = pausedRun;
+    try {
+      const events = await mockContinueRun(MOCK_AGENT.id, run?.userText ?? null, {
+        speed: streamSpeed,
+      });
+      setPausedRun(null);
+      setContinuing(false);
+      if (run && events) {
+        patchAssistantMessage(run.chatId, run.assistantId, {
+          text: null,
+          preview: "",
+          paused: false,
+          status: "streaming",
+        });
+        await runStream(run.chatId, run.assistantId, events, run.userText);
+      }
+    } catch (error) {
+      setContinuing(false);
+      setContinueNotice(
+        error instanceof ApiError && error.status === 409
+          ? {
+              kind: "waiting",
+              message: "Still waiting for an admin to approve more. Your chat is saved.",
+            }
+          : {
+              kind: "error",
+              message: "Couldn't continue. Check your connection and try again.",
+            }
+      );
+    }
   }
 
   function patchApproval(
@@ -326,16 +440,13 @@ function ChatPageInner() {
       text: null,
       preview: "",
       status: "streaming",
+      paused: false,
       error: undefined,
       toolNote: undefined,
       guardNote: undefined,
       citations: undefined,
     });
-    void runStream(
-      activeChatId,
-      messageId,
-      mockChatStream(userMessage.text, { speed: streamSpeed })
-    );
+    void startRun(activeChatId, messageId, userMessage.text);
   }
 
   const activeMessages =
@@ -348,6 +459,12 @@ function ChatPageInner() {
       (m.approval?.status === "pending" || m.approval?.status === "deciding")
   );
 
+  // Paused is agent-wide: every chat stops until an admin approves more.
+  // Once approved, a stopped run stays on screen with Continue.
+  const showPaused = pausedRun !== null || budgetState === "paused";
+  const approved = budgetState !== "paused";
+  const pausedChatId = showPaused ? (pausedRun?.chatId ?? activeChatId) : null;
+
   return (
     <div className="flex min-h-dvh flex-col bg-canvas">
       <TopNav />
@@ -357,23 +474,44 @@ function ChatPageInner() {
           chats={chats}
           chatsState={chatsState}
           activeChatId={activeChatId}
+          pausedChatId={pausedChatId}
           onSelectChat={handleSelectChat}
           onNewChat={handleNewChat}
           onRetryChats={retryLoadChats}
         />
         <main className="flex min-h-0 flex-1 flex-col">
+          {budgetState === "warned" && !showPaused ? (
+            <BudgetWarningBanner agentName={MOCK_AGENT.name} />
+          ) : null}
           <ChatThread
             messages={activeMessages}
             threadState={threadState}
             agentName={MOCK_AGENT.name}
             onRetryMessage={handleRetryMessage}
             onDecide={handleDecide}
+            footer={
+              showPaused ? (
+                <BudgetPausedCard
+                  agentName={MOCK_AGENT.name}
+                  approved={approved}
+                  continuing={continuing}
+                  notice={continueNotice}
+                  onContinue={() => void handleContinue()}
+                />
+              ) : null
+            }
           />
           <Composer
             agentName={MOCK_AGENT.name}
-            disabled={isStreaming || awaitingDecision}
+            disabled={isStreaming || awaitingDecision || showPaused}
             placeholder={
-              awaitingDecision ? "Waiting for your decision" : undefined
+              showPaused
+                ? approved
+                  ? "Approved, press Continue"
+                  : "Paused, waiting for an admin"
+                : awaitingDecision
+                  ? "Waiting for your decision"
+                  : undefined
             }
             onSend={sendMessage}
           />
