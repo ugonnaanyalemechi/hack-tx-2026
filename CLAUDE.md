@@ -20,8 +20,12 @@ If these docs disagree with a ticket, stop and flag it on the ticket instead of 
 ## Commands
 
 - Start the database: `docker compose up -d`
+- Apply migrations: `uv run alembic upgrade head`
+- New migration: `uv run alembic revision --autogenerate -m "<message>"`
 - Backend tests: `uv run pytest`
+- The check command (lint, types, tests — run this before every commit): `uv run check`
 - Add a backend dependency: `uv add <package>` (dev tools: `uv add --dev <package>`)
+- Run the backend app: `uv run hack-tx-2026`
 - Frontend (run in `web/`): `npm install`, `npm run dev`, `npm test`
 - Browser/screenshot checks: Playwright (`npx playwright test`)
 
