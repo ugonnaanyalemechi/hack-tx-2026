@@ -239,7 +239,11 @@ def deploy_version(
 
     Normal deploy (no override_reason): owner only. Runs the evals; a passing
     report deploys and makes the version live, a failing one marks it
-    "blocked" and never changes the live version. Both return 200.
+    "blocked" and never changes the live version. Both return 200. A deploy
+    makes a version live; it does not re-test the live one, so deploying the
+    version that is already live is a 409 "already_live" that changes nothing
+    (no evals, no new report). This keeps the live version from ever being
+    "blocked". Draft and blocked versions can be deployed (again) as usual.
 
     Override (override_reason given): admin only (any admin, owner or not).
     The reason must be non-blank and the version must be "blocked". Evals are
@@ -250,6 +254,8 @@ def deploy_version(
     if override_reason is None:
         _require_owner(agent, user, "deploy")
         version = _find_version(session, agent, version_number)
+        if version.id == agent.live_version_id:
+            raise ApiError(409, "already_live", f"Version {version_number} is already live")
         report = run_evals(session, version, user.id)
         if report.passed:
             version.status = "deployed"

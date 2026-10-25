@@ -352,6 +352,27 @@ def test_owner_redeploy_after_fix_clears_queue(client, monkeypatch):
     assert blocked_items(client) == []
 
 
+def test_deploying_the_live_version_is_rejected_and_changes_nothing(client, monkeypatch):
+    agent_id = create_agent(client)
+    add_case(client, agent_id, "q1", expected_strings=["alpha"])
+    fake_runtime(monkeypatch, {"q1": ok("alpha"), "q2": ok("nope")})
+    first = deploy(client, agent_id).json()
+    assert first["live_version_number"] == 1
+    add_case(client, agent_id, "q2", expected_strings=["beta"])  # e.g. a flagged run saved
+
+    r = deploy(client, agent_id)
+
+    assert r.status_code == 409
+    assert r.json()["error"]["code"] == "already_live"
+    detail = client.get(f"/v1/agents/{agent_id}", headers=BUILDER).json()
+    assert detail["live_version_number"] == 1
+    assert detail["versions"][0]["status"] == "deployed"
+    rep = report(client, agent_id).json()
+    assert rep["id"] == first["eval_report"]["id"]
+    assert rep["score"] == 1.0 and rep["passed"] is True
+    assert blocked_items(client) == []
+
+
 def test_deploy_still_owner_only(client):
     agent_id = create_agent(client)
     assert deploy(client, agent_id, headers=BUILDER_2).status_code == 403
