@@ -24,7 +24,7 @@ interface NavTab {
 const NAV_TABS: NavTab[] = [
   // Chat pages sit under the catalog, as in docs/design/chat_with_flag.png.
   { label: "Catalog", href: "/catalog", matches: ["/catalog", "/chat"] },
-  { label: "Build", href: "/build", matches: ["/build"] },
+  { label: "Build", href: "/build", matches: ["/build", "/agents"] },
   { label: "Admin", href: "/admin", matches: ["/admin"], visibleTo: canOpenAdmin },
 ];
 
