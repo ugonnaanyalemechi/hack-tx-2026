@@ -6,6 +6,7 @@ import {
   blockedReport,
   deployedResponse,
   fakePlatformApi,
+  LIVE,
   version,
 } from "./support/deploy-api";
 
@@ -135,7 +136,7 @@ test.describe("demo rehearsal (mock mode)", () => {
       }),
     });
 
-    await page.goto(`/agents/${AGENT_ID}/evals`);
+    await page.goto(`/agents/${AGENT_ID}/evals${LIVE}`);
     await actAsDeploy(page, "Admin");
     const gate = page.getByRole("region", { name: "Deploy gate" });
     await expect(gate).toContainText("v2 is blocked");

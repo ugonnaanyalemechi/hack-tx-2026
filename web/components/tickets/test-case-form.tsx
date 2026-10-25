@@ -8,6 +8,7 @@
 
 import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { SaveAsTestCaseRequest } from "@/lib/contracts/tickets";
@@ -46,7 +47,7 @@ export function TestCaseForm({
     <form
       onSubmit={handleSubmit}
       aria-label="Save as test case"
-      className="flex flex-col gap-4 rounded-lg border border-border-default bg-white/4 p-4"
+      className="flex flex-col gap-4 rounded-lg border border-border-default bg-surface-2 p-4"
     >
       <p className="text-sm text-text-secondary">
         Future deploys will be tested with: <span className="text-text-primary">{question}</span>
@@ -74,12 +75,7 @@ export function TestCaseForm({
       </label>
 
       <label className="flex items-center gap-2 text-sm text-text-secondary">
-        <input
-          type="checkbox"
-          checked={citation}
-          onChange={(e) => setCitation(e.target.checked)}
-          className="size-4 accent-primary-500"
-        />
+        <Checkbox checked={citation} onCheckedChange={setCitation} />
         Answer must cite a source
       </label>
 
@@ -90,7 +86,7 @@ export function TestCaseForm({
       ) : null}
 
       <div className="flex items-center gap-2">
-        <Button type="submit" size="sm" disabled={saving} className="rounded-pill px-4">
+        <Button type="submit" size="sm" disabled={saving} className="px-4">
           {saving ? "Saving…" : "Save test case"}
         </Button>
         <Button
@@ -99,7 +95,7 @@ export function TestCaseForm({
           size="sm"
           disabled={saving}
           onClick={onCancel}
-          className="rounded-pill px-3"
+          className="px-3"
         >
           Cancel
         </Button>

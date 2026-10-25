@@ -28,6 +28,12 @@ import type { AdminQueue, BudgetOut } from "@/lib/contracts/budgets";
 import { ApiError, type ApiClient } from "@/lib/api/client";
 import type { TicketDetail, TicketListItem } from "@/lib/contracts/tickets";
 import { allMockTickets, persistFiledTickets } from "@/lib/api/mock-tickets";
+import {
+  mockBlockedDeploys,
+  mockDeployVersion,
+  mockGetAgentDetail,
+  mockListEvalReports,
+} from "@/lib/api/mock-deploy";
 import { mockApproveSpend, mockGetBudget, mockListBudgets } from "@/lib/api/mock-budgets";
 import {
   MOCK_AGENTS,
@@ -66,7 +72,10 @@ function sumDecimals(values: string[]): string {
 export function createMockClient(options: MockClientOptions): ApiClient {
   const { userId, latencyMs = 250, getScenario = () => null } = options;
 
-  function respond<T>(produce: () => T, opts: { ignoreScenario?: boolean } = {}): Promise<T> {
+  function respond<T>(
+    produce: () => T,
+    opts: { ignoreScenario?: boolean; delayMs?: number } = {}
+  ): Promise<T> {
     const scenario = opts.ignoreScenario ? null : getScenario();
     if (scenario === "loading") return new Promise<T>(() => {});
     return new Promise<T>((resolve, reject) => {
@@ -82,7 +91,7 @@ export function createMockClient(options: MockClientOptions): ApiClient {
         } catch (error) {
           reject(error);
         }
-      }, latencyMs);
+      }, opts.delayMs ?? latencyMs);
     });
   }
 
@@ -178,18 +187,11 @@ export function createMockClient(options: MockClientOptions): ApiClient {
   }
 
   function toListItem(ticket: TicketDetail): TicketListItem {
-    return {
-      id: ticket.id,
-      agent_id: ticket.agent_id,
-      agent_name: ticket.agent_name,
-      run_id: ticket.run_id,
-      recheck_run_id: ticket.recheck_run_id,
-      question: ticket.question,
-      status: ticket.status,
-      created_by: ticket.created_by,
-      created_at: ticket.created_at,
-      resolved_at: ticket.resolved_at,
-    };
+    const { answer, note, created_by_name, ...item } = ticket;
+    void answer;
+    void note;
+    void created_by_name;
+    return item;
   }
 
   function requireAdmin(user: UserPublic) {
@@ -319,6 +321,24 @@ export function createMockClient(options: MockClientOptions): ApiClient {
         };
       }),
 
+    getAgentDetail: (agentId) =>
+      respond(() => {
+        caller();
+        return mockGetAgentDetail(agentId, { empty: isEmpty() });
+      }),
+
+    listEvalReports: (agentId) =>
+      respond(() => {
+        caller();
+        return mockListEvalReports(agentId, { empty: isEmpty() });
+      }),
+
+    // RUNTIME-PLACEHOLDER(#26): the delay stands in for the time a real eval run takes.
+    deployVersion: (agentId, versionNumber, overrideReason) =>
+      respond(() => mockDeployVersion(agentId, versionNumber, caller(), overrideReason), {
+        delayMs: overrideReason ? latencyMs : 900,
+      }),
+
     getBudget: (agentId) =>
       respond(() => {
         const user = caller();
@@ -349,21 +369,31 @@ export function createMockClient(options: MockClientOptions): ApiClient {
     getAdminQueue: () =>
       respond((): AdminQueue => {
         requireAdmin(caller());
-        const items = isEmpty() ? [] : mockListBudgets();
-        return {
-          items: items
-            .filter((b) => b.state === "paused")
-            .map((b) => ({
-              kind: "budget_pause" as const,
-              agent_id: b.agent_id,
-              agent_name: b.agent_name,
-              spent: b.spent,
-              cap: b.cap,
-              extra_allowance: b.extra_allowance,
-              cap_total: b.cap_total,
-              since: b.updated_at,
-            })),
-        };
+        if (isEmpty()) return { items: [] };
+        // Oldest first within a kind, like a queue; the page groups by kind.
+        const pauses = mockListBudgets()
+          .filter((b) => b.state === "paused")
+          .map((b) => ({
+            kind: "budget_pause" as const,
+            agent_id: b.agent_id,
+            agent_name: b.agent_name,
+            spent: b.spent,
+            cap: b.cap,
+            extra_allowance: b.extra_allowance,
+            cap_total: b.cap_total,
+            since: b.updated_at,
+          }));
+        const tickets = allMockTickets().filter((t) => t.status === "open")
+          .map((t) => ({
+            kind: "open_ticket" as const,
+            ticket_id: t.id,
+            agent_id: t.agent_id,
+            agent_name: t.agent_name,
+            question: t.question,
+            since: t.created_at,
+          }))
+          .reverse();
+        return { items: [...pauses, ...mockBlockedDeploys(), ...tickets] };
       }),
   };
 }

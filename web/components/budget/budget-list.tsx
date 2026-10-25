@@ -34,7 +34,7 @@ function StateBadge({ budget }: { budget: BudgetOut }) {
 function Meter({ budget }: { budget: BudgetOut }) {
   const share = Math.min(percentSpent(budget), 100);
   return (
-    <div className="h-2 w-40 overflow-hidden rounded-pill bg-primary-500/16" aria-hidden>
+    <div className="h-2 w-40 overflow-hidden bg-primary-500/16" aria-hidden>
       <div
         className={`h-full rounded-r-xs ${budget.state === "warned" ? "bg-warning" : "bg-primary-500"}`}
         style={{ width: `${share}%` }}
@@ -82,7 +82,7 @@ function BudgetRow({
                 disabled={approving}
                 onClick={onApprove}
                 aria-label={`Approve and resume ${budget.agent_name}`}
-                className="h-9 gap-2 rounded-pill bg-primary-500 px-4 text-sm font-medium text-neutral-50 hover:bg-primary-600"
+                className="h-9 gap-2 bg-primary-500 px-4 text-sm font-medium text-neutral-50 hover:bg-primary-600"
               >
                 {approving ? (
                   <>

@@ -40,7 +40,7 @@ export function ErrorState({
           variant="outline"
           size="sm"
           onClick={onRetry}
-          className="gap-1.5 rounded-pill"
+          className="gap-1.5"
         >
           <RotateCcw className="size-3.5" aria-hidden />
           Retry

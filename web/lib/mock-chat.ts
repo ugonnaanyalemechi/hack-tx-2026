@@ -15,13 +15,30 @@ import { mockFileFlagTicket } from "./api/mock-tickets";
 import type { StreamEvent } from "./contracts/events";
 import type { Agent, ApprovalDecision, ChatSummary } from "./chat-types";
 
-export const MOCK_AGENT: Agent = {
-  // The API's id for Filings Analyst, so the chat and the admin budget view
-  // share one budget (lib/api/mock-budgets.ts).
-  id: MOCK_AGENTS.find((a) => a.slug === "filings-analyst")?.id ?? "agent_filings_analyst",
-  name: "Filings Analyst",
-  ownerName: "Priya",
-};
+const FILINGS_ANALYST = MOCK_AGENTS.find((a) => a.slug === "filings-analyst") ?? MOCK_AGENTS[0];
+
+function toChatAgent(agent: (typeof MOCK_AGENTS)[number]): Agent {
+  return {
+    // The API's id, so the chat and the admin budget view share one budget
+    // (lib/api/mock-budgets.ts).
+    id: agent.id,
+    name: agent.name,
+    ownerName: MOCK_USERS.find((u) => u.id === agent.owner_id)?.name ?? agent.owner_id,
+  };
+}
+
+/** The agent shown when `/chat` has no (or an unknown) `?agent=`. */
+export const MOCK_AGENT: Agent = toChatAgent(FILINGS_ANALYST);
+
+/**
+ * The agent named by `/chat?agent=<id>`, with its name and owner from the
+ * mock catalog. Falls back to Filings Analyst for a missing or unknown id.
+ */
+// RUNTIME-PLACEHOLDER(#15): resolves the agent from the mock catalog fixtures. Replace with the agent read (`GET /v1/agents/{id}`) once the chat page talks to the real thread API.
+export function getMockChatAgent(agentId: string | null): Agent {
+  const found = agentId ? MOCK_AGENTS.find((a) => a.id === agentId) : undefined;
+  return found ? toChatAgent(found) : MOCK_AGENT;
+}
 
 function wait(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -34,8 +51,11 @@ function nextId(prefix: string) {
 }
 
 /** Seed a couple of past chats with realistic finance Q&A so loaded/empty
- * states both have something meaningful to screenshot. */
-export function getSeedChats(): ChatSummary[] {
+ * states both have something meaningful to screenshot. Only the Filings
+ * Analyst has history; any other agent starts with an empty chat list. */
+// RUNTIME-PLACEHOLDER(#15): fixture chat history. Replace with the thread list read (`GET` threads for the agent and user) once the chat API exists.
+export function getSeedChats(agentId: string = MOCK_AGENT.id): ChatSummary[] {
+  if (agentId !== MOCK_AGENT.id) return [];
   return [
     {
       id: "chat_acme_revenue",
@@ -296,6 +316,7 @@ export interface DecideOptions extends StreamOptions {
  *   run_finished(completed). The tool never runs; the agent is told it was
  *   declined and carries on without it.
  */
+// RUNTIME-PLACEHOLDER(#24): fakes the approval decision call and the resumed run's stream (approve runs the tool, reject skips it). Replace with the real decide endpoint, which resumes the stopped run and streams StreamEvents.
 export async function mockDecideApproval(
   approvalId: string,
   decision: ApprovalDecision,

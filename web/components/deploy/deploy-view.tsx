@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, FlaskConical } from "lucide-react";
-import { deployVersion, getAgent, getLatestEvalReport } from "@/lib/deploy-api";
 import type { DeployResponse, EvalReportOut } from "@/lib/contracts/evals";
 import type { AgentDetail } from "@/lib/contracts/registry";
 import { useIdentity } from "@/lib/identity";
@@ -20,7 +19,7 @@ import { gateOutcome, minScoreOf } from "@/components/deploy/gate";
 type Load =
   | { state: "loading" }
   | { state: "error"; message: string }
-  | { state: "ready"; agent: AgentDetail; report: EvalReportOut | null };
+  | { state: "ready"; agent: AgentDetail; reports: EvalReportOut[] };
 
 const PAGE_FRAME = "mx-auto flex w-full max-w-300 flex-col gap-8 px-12 pt-8 pb-16";
 
@@ -30,24 +29,23 @@ function withoutReport({ eval_report, ...agent }: DeployResponse): AgentDetail {
 }
 
 export function DeployView({ agentId }: { agentId: string }) {
-  const { currentUser: user } = useIdentity();
-  const userId = user?.id ?? null;
+  const { currentUser: user, api } = useIdentity();
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const attempt = useRef(0);
 
   // State is only set from the promise callbacks, never synchronously in the
   // effect; `load` already starts as "loading" for the first fetch.
   const fetchAll = useCallback(() => {
-    if (!userId) return;
+    if (!api) return;
     const current = ++attempt.current;
-    Promise.all([getAgent(agentId, userId), getLatestEvalReport(agentId, userId)])
-      .then(([agent, report]) => {
-        if (current === attempt.current) setLoad({ state: "ready", agent, report });
+    Promise.all([api.getAgentDetail(agentId), api.listEvalReports(agentId)])
+      .then(([agent, reports]) => {
+        if (current === attempt.current) setLoad({ state: "ready", agent, reports });
       })
       .catch((error: Error) => {
         if (current === attempt.current) setLoad({ state: "error", message: error.message });
       });
-  }, [agentId, userId]);
+  }, [agentId, api]);
 
   useEffect(() => {
     fetchAll();
@@ -58,15 +56,25 @@ export function DeployView({ agentId }: { agentId: string }) {
     fetchAll();
   }
 
-  if (!user || load.state === "loading") return <DeployViewSkeleton />;
+  if (!user || !api || load.state === "loading") return <DeployViewSkeleton />;
   if (load.state === "error") return <LoadError message={load.message} onRetry={retry} />;
 
   const viewer = user;
-  const { agent, report } = load;
+  const client = api;
+  const { agent, reports } = load;
+  // Newest first: the latest test run drives the header, stats and gate.
+  const report = reports[0] ?? null;
   const latest = agent.versions.at(-1);
 
   function applyDeploy(response: DeployResponse) {
-    setLoad({ state: "ready", agent: withoutReport(response), report: response.eval_report ?? report });
+    const fresh = response.eval_report;
+    setLoad({
+      state: "ready",
+      agent: withoutReport(response),
+      reports: fresh
+        ? [fresh, ...reports.filter((r) => r.version_number !== fresh.version_number)]
+        : reports,
+    });
   }
 
   const reportVersion = report
@@ -80,7 +88,7 @@ export function DeployView({ agentId }: { agentId: string }) {
 
   async function override(reason: string) {
     if (!report) return;
-    applyDeploy(await deployVersion(agent.id, report.version_number, viewer.id, reason));
+    applyDeploy(await client.deployVersion(agent.id, report.version_number, reason));
   }
 
   // Normal deploys are owner-only; the live version is never redeployed (#48).
@@ -91,7 +99,7 @@ export function DeployView({ agentId }: { agentId: string }) {
 
   async function deployLatest() {
     if (!latest) return;
-    applyDeploy(await deployVersion(agent.id, latest.version_number, viewer.id));
+    applyDeploy(await client.deployVersion(agent.id, latest.version_number));
   }
 
   return (
@@ -126,7 +134,7 @@ export function DeployView({ agentId }: { agentId: string }) {
         </TabsContent>
 
         <TabsContent value="versions">
-          <VersionsCard agent={agent} report={report} />
+          <VersionsCard agent={agent} reports={reports} />
         </TabsContent>
       </Tabs>
     </div>
@@ -168,7 +176,7 @@ function LoadError({ message, onRetry }: { message: string; onRetry: () => void 
           variant="outline"
           size="sm"
           onClick={onRetry}
-          className="w-fit rounded-pill"
+          className="w-fit"
         >
           Retry
         </Button>

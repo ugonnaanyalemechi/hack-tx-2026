@@ -40,6 +40,9 @@ export interface SaveAsTestCaseRequest {
   rubric: string | null;
 }
 
+/** Where an eval case came from: written by hand, or saved from a flag ticket. */
+export type EvalCaseOrigin = "manual" | "flag";
+
 /** Response (201) of `POST /v1/tickets/{id}/save-as-test-case`. */
 export interface EvalCaseOut {
   id: string;
@@ -48,7 +51,7 @@ export interface EvalCaseOut {
   expected_strings: string[];
   citation_required: boolean;
   rubric: string | null;
-  /** "manual" or "flag"; a ticket always saves "flag". */
-  origin: string;
+  /** A ticket always saves "flag". */
+  origin: EvalCaseOrigin;
   created_at: IsoDateTime;
 }

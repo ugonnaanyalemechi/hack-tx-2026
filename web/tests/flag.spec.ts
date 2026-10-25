@@ -43,8 +43,8 @@ test.describe("flag and re-check", () => {
     await expect(recheck.getByText(/I checked this against the filing again/)).toBeVisible({
       timeout: 15_000,
     });
-    // A re-check answer cannot itself be flagged.
-    await expect(recheck.getByRole("button", { name: "Flag" })).toHaveCount(0);
+    // A re-check answer has its own Flag button, in case the re-check is wrong too.
+    await expect(recheck.getByRole("button", { name: "Flag" })).toBeVisible();
 
     await expect(flagged.getByText("Re-check done", { exact: true })).toBeVisible();
     await expect(flagged.getByText(/The re-checked answer is below/)).toBeVisible();
@@ -70,5 +70,22 @@ test.describe("flag and re-check", () => {
     await expect(flagged.getByText("Re-check done", { exact: true })).toBeVisible({
       timeout: 15_000,
     });
+  });
+
+  test("a re-checked answer can be flagged again", async ({ page }) => {
+    await page.goto("/chat?fastStream=1");
+    const flagged = marginMessage(page);
+    await flagged.getByRole("button", { name: "Flag" }).click();
+    await expect(flagged.getByText("Re-check done", { exact: true })).toBeVisible({
+      timeout: 15_000,
+    });
+
+    const recheck = flagged.locator("xpath=following-sibling::div[1]");
+    await recheck.getByRole("button", { name: "Flag" }).click();
+    await expect(recheck.getByRole("button", { name: "Flagged" })).toBeDisabled();
+    await expect(recheck.getByText("Re-check done", { exact: true })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByText("Re-checked answer", { exact: true })).toHaveCount(2);
   });
 });

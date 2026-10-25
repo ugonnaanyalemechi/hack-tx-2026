@@ -47,7 +47,7 @@ export function ChatSidebar({
       <Button
         type="button"
         onClick={onNewChat}
-        className="h-10 w-full justify-center gap-1.5 rounded-pill bg-steel text-sm font-medium text-text-inverse hover:brightness-110"
+        className="h-10 w-full justify-center gap-1.5 bg-steel text-sm font-medium text-text-inverse hover:brightness-110"
       >
         <Plus className="size-4" aria-hidden />
         New chat
@@ -108,7 +108,7 @@ function ChatList({
           variant="outline"
           size="sm"
           onClick={onRetryChats}
-          className="w-fit rounded-pill"
+          className="w-fit"
         >
           Retry
         </Button>

@@ -27,6 +27,8 @@ const badgeVariants = cva(
         warning: "h-6 rounded-pill border-warning/28 bg-warning/12 px-2.5 text-warning",
         error: "h-6 rounded-pill border-error/28 bg-error/12 px-2.5 text-error",
         info: "h-6 rounded-pill border-info/28 bg-info/12 px-2.5 text-info",
+        // Mono caps tag for catalog metadata (owner, built with).
+        tag: "h-6 rounded-xs border-border-default bg-surface-2 px-2 font-mono text-overline tracking-overline text-text-secondary uppercase",
       },
     },
     defaultVariants: {

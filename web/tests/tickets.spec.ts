@@ -95,6 +95,69 @@ test.describe("flag tickets", () => {
     ).toBeVisible();
   });
 
+  test("a builder who does not own the agent gets no actions", async ({ page }) => {
+    // The mock only lists a builder their own tickets, so fake the API: the
+    // server may show a builder a ticket on another builder's agent.
+    const ticket = (id: string, agent_id: string, question: string) => ({
+      id,
+      agent_id,
+      agent_name: agent_id === "agt_mine" ? "My Agent" : "Their Agent",
+      run_id: "run_1",
+      recheck_run_id: null,
+      question,
+      status: "open",
+      created_by: "usr_end_user",
+      created_at: "2026-10-25T12:00:00Z",
+      resolved_at: null,
+    });
+    const agent = (id: string, owner_id: string) => ({
+      id,
+      slug: id,
+      name: id,
+      description: "",
+      owner_id,
+      live_version_number: 1,
+      latest_version_number: 1,
+    });
+    await page.route("**/api/v1/**", (route) => {
+      const path = new URL(route.request().url()).pathname.replace("/api/v1", "");
+      const bodies: Record<string, unknown> = {
+        "/users": [
+          { id: "usr_admin", name: "Ada Admin", role: "admin" },
+          { id: "usr_builder", name: "Ben Builder", role: "builder" },
+          { id: "usr_end_user", name: "Eli End User", role: "end_user" },
+        ],
+        "/agents": {
+          items: [agent("agt_mine", "usr_builder"), agent("agt_theirs", "usr_builder_2")],
+          next_cursor: null,
+        },
+        "/tickets": {
+          items: [
+            ticket("tkt_a", "agt_mine", "On my agent"),
+            ticket("tkt_b", "agt_theirs", "On their agent"),
+          ],
+          next_cursor: null,
+        },
+      };
+      return route.fulfill({ json: bodies[path] ?? { error: { code: "not_found", message: path } } });
+    });
+
+    await page.goto("/admin/tickets?api=live");
+    await actAs(page, "Builder");
+
+    await expect(page.getByTestId("ticket-row")).toHaveCount(2);
+    await expect(
+      ticketRow(page, "On my agent").getByRole("button", { name: "Resolve" })
+    ).toBeVisible();
+    await expect(
+      ticketRow(page, "On their agent").getByRole("button", { name: "Resolve" })
+    ).toHaveCount(0);
+    await expect(
+      ticketRow(page, "On their agent").getByRole("button", { name: "Save as test case" })
+    ).toHaveCount(0);
+    await expect(ticketRow(page, "On their agent").getByRole("link", { name: "View run" })).toBeVisible();
+  });
+
   test("an end user cannot see or act on tickets", async ({ page }) => {
     await page.goto("/admin/tickets");
     await actAs(page, "End user");
