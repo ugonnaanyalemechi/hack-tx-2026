@@ -68,6 +68,15 @@ class BudgetPausedEvent(BaseModel):
     agent_id: str
 
 
+class BudgetWarningEvent(BaseModel):
+    """Sent once, before run_finished (and before any error or budget_paused),
+    in the run whose spend takes the agent past its budget's warning fraction.
+    Carries no amounts: cost is never shown to end users (#61)."""
+
+    type: Literal["budget_warning"] = "budget_warning"
+    agent_id: str
+
+
 class GuardNoteEvent(BaseModel):
     type: Literal["guard_note"] = "guard_note"
     note: str
@@ -96,6 +105,7 @@ StreamEvent = Annotated[
     | ToolResultEvent
     | ApprovalRequiredEvent
     | BudgetPausedEvent
+    | BudgetWarningEvent
     | GuardNoteEvent
     | MessageCompleteEvent
     | RunFinishedEvent

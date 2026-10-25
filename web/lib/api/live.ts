@@ -129,5 +129,18 @@ export function createLiveClient(options: LiveClientOptions): ApiClient {
     // RUNTIME-PLACEHOLDER(#56): replace with GET /v1/admin/connector-grants (needs tool descriptions, #55).
     listConnectorGrants: () =>
       Promise.reject(new RuntimeNotAvailableError("Connector grants aren't available yet", 56)),
+    validateAgentSpec: (specYaml) => post("/v1/agents/validate", { spec_yaml: specYaml }),
+    createAgent: (specYaml) => post("/v1/agents", { spec_yaml: specYaml }),
+    addAgentVersion: (agentId, specYaml) =>
+      post(`/v1/agents/${encodeURIComponent(agentId)}/versions`, { spec_yaml: specYaml }),
+    // RUNTIME-PLACEHOLDER(#57): no connector grants route yet.
+    listBuildConnectors: () =>
+      Promise.reject(new RuntimeNotAvailableError("Connector approvals aren't available yet", 57)),
+    // RUNTIME-PLACEHOLDER(#57): no connector approval request route yet.
+    requestConnectorApproval: () =>
+      Promise.reject(new RuntimeNotAvailableError("Requesting approval isn't available yet", 57)),
+    // RUNTIME-PLACEHOLDER(#15): needs a metered model call behind a route.
+    suggestAgentForm: () =>
+      Promise.reject(new RuntimeNotAvailableError("The setup assistant isn't available yet", 15)),
   };
 }

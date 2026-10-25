@@ -10,6 +10,7 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from hack_tx_2026.db.orm import Agent, AgentVersion, Budget, Run
@@ -86,7 +87,13 @@ def _sync_row(session: Session, agent: Agent, cap: Decimal, fraction: float) -> 
             extra_allowance=ZERO,
             state="ok",
         )
-        session.add(row)
+        try:
+            with session.begin_nested():
+                session.add(row)
+        except IntegrityError:
+            # Two open chats checked a new agent's budget at once and the
+            # other one created the row first: use that one.
+            row = session.scalars(select(Budget).where(Budget.agent_id == agent.id)).one()
     row.cap = cap
     row.warning_fraction = fraction
     if row.period_start < period:

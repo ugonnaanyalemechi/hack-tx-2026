@@ -30,6 +30,8 @@ import type {
   ConnectorRequest,
   DecideConnectorResult,
 } from "@/lib/contracts/connectors";
+import type { BuildConnector } from "@/lib/build-form";
+import type { AssistantSuggestion, ValidateResult } from "@/lib/api/mock-build";
 import type { DeployResponse, EvalReportOut } from "@/lib/contracts/evals";
 import type { AgentDetail } from "@/lib/contracts/registry";
 import type {
@@ -123,6 +125,28 @@ export interface ApiClient {
    * lists grants. Intended `GET /v1/admin/connector-grants`; live throws.
    */
   listConnectorGrants(): Promise<ConnectorGrantRow[]>;
+  /** `POST /v1/agents/validate`: checks an agent file, returns errors naming each bad field. */
+  validateAgentSpec(specYaml: string): Promise<ValidateResult>;
+  /** `POST /v1/agents`: 201 with the new agent and its first (draft) version. */
+  createAgent(specYaml: string): Promise<AgentDetail>;
+  /** `POST /v1/agents/{id}/versions`: 201 with the agent including the new version. */
+  addAgentVersion(agentId: string, specYaml: string): Promise<AgentDetail>;
+  /**
+   * RUNTIME-PLACEHOLDER(#57): no backend route yet. Connectors the builder may
+   * pick, with approval status. Replaced by the connector grants list
+   * (`GET /v1/connectors`, platform).
+   */
+  listBuildConnectors(): Promise<BuildConnector[]>;
+  /**
+   * RUNTIME-PLACEHOLDER(#57): no backend route yet. Ask an admin to approve a
+   * connector. Replaced by `POST /v1/connectors/{id}/request-approval`.
+   */
+  requestConnectorApproval(connectorId: string): Promise<BuildConnector>;
+  /**
+   * RUNTIME-PLACEHOLDER(#15): the setup assistant. Mock matches keywords in
+   * canned results; replaced by `POST /v1/agents/suggest`, a metered model call.
+   */
+  suggestAgentForm(description: string): Promise<AssistantSuggestion>;
 }
 
 /** An `ErrorResponse` from the API (or a network failure, status 0). */

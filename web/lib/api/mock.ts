@@ -27,6 +27,13 @@ import type {
 import type { AdminQueue, BudgetOut } from "@/lib/contracts/budgets";
 import { ApiError, type ApiClient } from "@/lib/api/client";
 import type { TicketDetail, TicketListItem } from "@/lib/contracts/tickets";
+import {
+  mockCreateAgent,
+  mockListBuildConnectors,
+  mockRequestConnectorApproval,
+  mockSuggestAgentForm,
+  mockValidateSpec,
+} from "@/lib/api/mock-build";
 import { allMockTickets, persistFiledTickets } from "@/lib/api/mock-tickets";
 import {
   mockBlockedDeploys,
@@ -436,5 +443,35 @@ export function createMockClient(options: MockClientOptions): ApiClient {
         requireAdmin(caller());
         return isEmpty() ? [] : mockListConnectorGrants();
       }),
+    // POST /v1/agents/validate
+    validateAgentSpec: (specYaml) => respond(() => mockValidateSpec(specYaml), { delayMs: 120 }),
+    // POST /v1/agents
+    createAgent: (specYaml) =>
+      respond(
+        () => {
+          const user = caller();
+          if (user.role === "end_user") throw forbidden();
+          return mockCreateAgent(specYaml, user.id);
+        },
+        { delayMs: 700 }
+      ),
+    // POST /v1/agents/{id}/versions
+    addAgentVersion: (agentId, specYaml) =>
+      respond(
+        () => {
+          const user = caller();
+          if (user.role === "end_user") throw forbidden();
+          return { ...mockCreateAgent(specYaml, user.id), id: agentId };
+        },
+        { delayMs: 700 }
+      ),
+    // RUNTIME-PLACEHOLDER(#57): GET /v1/connectors
+    listBuildConnectors: () => respond(() => mockListBuildConnectors()),
+    // RUNTIME-PLACEHOLDER(#57): POST /v1/connectors/{id}/request-approval
+    requestConnectorApproval: (connectorId) =>
+      respond(() => mockRequestConnectorApproval(connectorId), { delayMs: 300 }),
+    // RUNTIME-PLACEHOLDER(#15): POST /v1/agents/suggest (a metered model call)
+    suggestAgentForm: (description) =>
+      respond(() => mockSuggestAgentForm(description), { delayMs: 900 }),
   };
 }

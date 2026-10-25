@@ -220,6 +220,30 @@ def test_validate_accepts_side_effect_tools_within_allow_list_or_without_one(
     assert r.json() == {"valid": True, "errors": []}
 
 
+@pytest.mark.parametrize("bad", [".inf", "-.inf", ".nan"])
+@pytest.mark.parametrize(
+    ("section", "field", "template"),
+    [
+        ("budget", "budget.monthly_cap", "budget:\n  monthly_cap: {bad}\n"),
+        (
+            "budget",
+            "budget.warning_fraction",
+            "budget:\n  monthly_cap: 25.0\n  warning_fraction: {bad}\n",
+        ),
+        ("evals", "evals.min_score", "evals:\n  min_score: {bad}\n"),
+    ],
+)
+def test_validate_rejects_infinite_and_nan_numbers(
+    bad: str, section: str, field: str, template: str
+) -> None:
+    spec_yaml = yaml_text(**{section: ...}) + template.format(bad=bad)
+
+    r = _post("/v1/agents/validate", {"spec_yaml": spec_yaml}, BUILDER)
+
+    assert r.json()["valid"] is False
+    assert field in errors_by_field(r)
+
+
 # --- create / list / detail ------------------------------------------------
 
 

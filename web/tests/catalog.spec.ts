@@ -44,8 +44,8 @@ test.describe("catalog", () => {
     await chips.getByRole("button", { name: "All" }).click();
     await expect(page.getByTestId("agent-card")).toHaveCount(5);
 
-    await expect(page.getByRole("link", { name: "Build an agent" })).toHaveAttribute("href", "/build");
-    await expect(page.getByRole("link", { name: "Start a build" })).toHaveAttribute("href", "/build");
+    await expect(page.getByRole("link", { name: "Build an agent" })).toHaveAttribute("href", "/build/new");
+    await expect(page.getByRole("link", { name: "Start a build" })).toHaveAttribute("href", "/build/new");
     await expect(page.getByText("Need one that is not here?")).toBeVisible();
   });
 

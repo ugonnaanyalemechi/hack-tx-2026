@@ -1,4 +1,8 @@
-"""Eval gate flow: eval cases, deploy gate, admin override and the blocked-deploy queue."""
+"""Eval gate flow: eval cases, deploy gate, admin override and the blocked-deploy queue.
+
+These tests fake `seams.run_agent` to choose each case's answer. Deploys that
+run their cases through the real runtime are in test_flow_eval_entry.py.
+"""
 
 from decimal import Decimal
 
@@ -244,15 +248,20 @@ def test_queue_mixes_budget_pause_and_blocked(client, monkeypatch, db_session):
     assert kinds == ["blocked_deploy", "budget_pause"]
 
 
-def test_runtime_stub_blocks_without_crashing(client):
+def test_a_runtime_error_blocks_without_crashing(client, monkeypatch):
     agent_id = create_agent(client)
     add_case(client, agent_id, "q1", expected_strings=["alpha"])
+
+    def run_agent(agent_version_id, entry_point, run_input):
+        raise LookupError("runtime unavailable")
+
+    monkeypatch.setattr(seams, "run_agent", run_agent)
     r = deploy(client, agent_id)
     assert r.status_code == 200
     assert r.json()["versions"][0]["status"] == "blocked"
     (case,) = r.json()["eval_report"]["per_case_results"]
     assert case["passed"] is False
-    assert "NotImplementedError" in case["error"]
+    assert "LookupError" in case["error"]
 
 
 def test_non_completed_run_or_no_output_fails_case(client, monkeypatch):

@@ -1,6 +1,7 @@
 """Request/response bodies for the connector endpoints (ticket #14)."""
 
 import datetime as dt
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -8,6 +9,8 @@ from pydantic import BaseModel
 class ToolOut(BaseModel):
     name: str
     side_effect: bool
+    description: str
+    input_schema: dict[str, Any]
 
 
 class ConnectorOut(BaseModel):
