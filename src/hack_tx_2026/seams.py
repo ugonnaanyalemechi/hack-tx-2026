@@ -42,7 +42,14 @@ class RunResult:
 def load_agent_tools(agent_version_id: str) -> list[Tool]:
     """Owned by platform (connector layer). Loads only tools from connectors
     granted to this agent and allowed by its spec's allow-list."""
-    raise NotImplementedError("owner:platform — connector layer, ticket #14")
+    from hack_tx_2026.connectors import load_agent_tools as _load_agent_tools
+    from hack_tx_2026.db.base import SessionLocal
+
+    session = SessionLocal()
+    try:
+        return list(_load_agent_tools(session, agent_version_id))
+    finally:
+        session.close()
 
 
 def check_agent_budget(agent_id: str) -> BudgetStatus:
