@@ -5,9 +5,9 @@ import argparse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from hack_tx_2026 import registry
+from hack_tx_2026 import connectors, registry
 from hack_tx_2026.db.base import SessionLocal
-from hack_tx_2026.db.orm import Agent, Connector, ConnectorGrant, EvalCase, User
+from hack_tx_2026.db.orm import Agent, ConnectorGrant, EvalCase, User
 from hack_tx_2026.demo import filings
 from hack_tx_2026.demo.seed_data import DEMO_EVAL_CASES, load_spec_yaml
 from hack_tx_2026.eval_cases import create_eval_case
@@ -48,15 +48,7 @@ def seed_demo(session: Session) -> str:
         agent.id if agent else registry.create_agent(session, DEMO_OWNER, load_spec_yaml()).id
     )
 
-    connector = session.scalar(select(Connector).where(Connector.name == filings.CONNECTOR_NAME))
-    if connector is None:
-        connector = Connector(
-            name=filings.CONNECTOR_NAME,
-            description=filings.CONNECTOR_DESCRIPTION,
-            tools=filings.TOOL_DEFS,
-        )
-        session.add(connector)
-        session.flush()
+    connector = connectors.seed_filings_demo_connector(session)
 
     has_grant = session.scalar(
         select(ConnectorGrant.id).where(
@@ -98,7 +90,7 @@ def main(argv: list[str] | None = None) -> None:
 
     with SessionLocal() as session:
         agent_id = seed_demo(session)
-        detail = registry.get_agent_detail(session, agent_id)
+        detail = registry.get_agent_detail(session, DEMO_OWNER, agent_id)
         versions = ", ".join(f"v{v.version_number} {v.status}" for v in detail.versions)
         cases = session.scalar(
             select(func.count()).select_from(EvalCase).where(EvalCase.agent_id == agent_id)

@@ -43,8 +43,8 @@ export function TopNav() {
           href="/catalog"
           className="flex items-center gap-2.5 rounded-xs outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
         >
-          <span className="size-6 rounded-xs bg-cobalt" aria-hidden />
-          <span className="text-base font-semibold tracking-tight text-text-primary">
+          <span className="size-2 rounded-pill bg-spark" aria-hidden />
+          <span className="font-serif text-base font-semibold tracking-wordmark text-text-primary uppercase">
             Foundry
           </span>
         </Link>

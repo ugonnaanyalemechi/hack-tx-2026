@@ -45,7 +45,7 @@ export function Composer({
       <Button
         type="submit"
         disabled={disabled || value.trim().length === 0}
-        className="h-11 shrink-0 gap-1.5 rounded-pill bg-neutral-50 px-5 text-sm font-medium text-text-inverse hover:bg-white"
+        className="h-11 shrink-0 gap-1.5 rounded-pill bg-steel px-5 text-sm font-medium text-text-inverse hover:brightness-110"
       >
         Send
         <Send className="size-3.5" aria-hidden />

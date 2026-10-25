@@ -5,13 +5,17 @@ create_ticket, attach_recheck_run and read_agent_version; runtime calls them. ru
 owned by runtime (its behavior is runtime's); platform's eval runner calls
 it. All bodies here are placeholders until the owning ticket lands —
 callers should only rely on the signatures below.
+
+Additions (ticket #51, additive only): `call_agent_tool` is the seam the
+runtime calls to run a tool; loaded tools now also carry `description` and
+`input_schema` (a JSON Schema object).
 """
 
 from typing import Any, Protocol
 
 from sqlalchemy import select
 
-from hack_tx_2026 import budgets, tickets
+from hack_tx_2026 import budgets, connectors, tickets
 from hack_tx_2026.db.base import SessionLocal
 from hack_tx_2026.db.orm import Agent, AgentVersion
 from hack_tx_2026.models.records import EntryPoint
@@ -20,6 +24,8 @@ from hack_tx_2026.models.records import EntryPoint
 class Tool(Protocol):
     name: str
     side_effect: bool
+    description: str
+    input_schema: dict[str, Any]
 
 
 class BudgetStatus:
@@ -46,6 +52,7 @@ class RunResult:
 
 def load_agent_tools(agent_version_id: str) -> list[Tool]:
     """Owned by platform (connector layer). Loads only tools from connectors
+<<<<<<< HEAD
     granted to this agent and allowed by its spec's allow-list."""
     from hack_tx_2026.connectors import load_agent_tools as _load_agent_tools
     from hack_tx_2026.db.base import SessionLocal
@@ -55,6 +62,26 @@ def load_agent_tools(agent_version_id: str) -> list[Tool]:
         return list(_load_agent_tools(session, agent_version_id))
     finally:
         session.close()
+=======
+    granted to this agent and allowed by its spec's allow-list. Each tool
+    also has `call(**arguments) -> dict`, which runs it under the
+    connector's own account, never the chatting user's. Raises LookupError
+    if the version is unknown. Uses its own DB session."""
+    with SessionLocal() as session:
+        return list(connectors.load_agent_tools(session, agent_version_id))
+
+
+def call_agent_tool(
+    agent_version_id: str, tool_name: str, tool_input: dict[str, Any]
+) -> dict[str, Any]:
+    """Owned by platform (connector layer). Called by runtime to run a tool.
+    Runs it under the connector's own account. Refuses any tool not loaded
+    for this version (ungranted, revoked or off the allow-list) by raising
+    connectors.ToolNotLoadedError (a PermissionError). Raises LookupError if
+    the version is unknown. Uses its own DB session."""
+    with SessionLocal() as session:
+        return connectors.call_agent_tool(session, agent_version_id, tool_name, tool_input)
+>>>>>>> origin/main
 
 
 def check_agent_budget(agent_id: str) -> BudgetStatus:

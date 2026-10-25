@@ -1,10 +1,12 @@
-# Nocturne Design System
+# Foundry Design System
 
-**Version 1.0 · October 2026**
+**Version 2.0 · October 2026** (replaces Nocturne 1.0)
 
-Nocturne is a visual language for calm, confident products that handle serious things: money, data and infrastructure. It uses a near-black ground, a single cobalt light source, white pill-shaped actions, and glass only where something sits behind it.
+Foundry is the visual language of an agent foundry: agents are forged, tested and shipped. It uses a gunmetal ground, machined steel plates, brushed-steel actions, one molten amber light, and a stalwart serif set against instrument-panel mono.
 
-**The feel in three words: calm, exact, trusted.**
+**The feel in three words: forged, stalwart, precise.**
+
+Reference mockups: `docs/design/foundry/foundry-mockups.html` (rendered as `catalog.png`, `chat.png`, `budget.png` in the same folder). The old Nocturne PNGs in `docs/design/` show the layouts, which are unchanged; only the skin differs.
 
 ---
 
@@ -23,180 +25,155 @@ Nocturne is a visual language for calm, confident products that handle serious t
 
 ## 1. Design principles
 
-Seven rules that keep every screen consistent.
-
 | # | Principle | Rule |
 |---|---|---|
-| P1 | **Dark ground, light as signal** | The page is night (`#07080F`). Pure white is spent only on what should be read or clicked first: the headline and the primary pill. |
-| P2 | **One light source per view** | A single cobalt radial glow sits behind the hero object. Everything else is flat. Depth comes from that light, not from many shadows. |
-| P3 | **Pills act, rectangles hold** | Anything you press (buttons, nav, badges, filters) is a full pill. Anything that contains content is a rounded rectangle, 16–28px. |
-| P4 | **Two-tone headlines** | State the claim in white and finish the thought in muted grey on the next line. Use tight negative tracking and never gradient text. |
-| P5 | **Glass is a layer, not a look** | Translucent, blurred surfaces only where something real sits behind them: floating chips over a hero, modals, sticky nav. |
-| P6 | **Generous air, low density** | Sections breathe at 128px, and body copy stops at 560px wide. Keep to one idea per band. If it feels empty, it is probably right. |
-| P7 | **Precise, plain tone** | Proof over adjectives: exact figures, short labels, sentence case. Set numbers large with a small caption under them. |
+| P1 | **Gunmetal ground, steel as signal** | The page is gunmetal (`#0E1012`). Bright brushed steel is spent only on what should be clicked first: the primary pill. Primary text is `#ECEEF0`. |
+| P2 | **One ember per view** | A single warm, low radial glow (molten amber) sits behind the hero. Everything else is flat. Depth comes from that light and from plate edges, not from many shadows. |
+| P3 | **Pills act, plates hold** | Anything you press (buttons, nav, badges, filters) is a full pill. Anything that contains content is a machined plate with a tight 8-12px radius. |
+| P4 | **Serif claims, mono measures** | Headlines are IBM Plex Serif and state the claim in primary text, finishing the thought in muted steel on the next line. Labels, overlines, table headers, numbers and data are Geist Mono, uppercase, wide-tracked. Body is Geist. |
+| P5 | **Plates have edges** | Cards get a 1px top-edge highlight and a hairline border, like a machined plate. A very faint brushed grain (at most 3% opacity) may sit on the canvas. Glass only where something real sits behind it. |
+| P6 | **One accent, honest semantics** | Molten amber is the only accent: focus, selected, progress, citations, the ember. Warning is yellow (`#E8C547`) so it never reads as the accent. |
+| P7 | **Precise, plain tone** | Proof over adjectives: exact figures, short labels, sentence case (Overline excepted). Set numbers in mono with a small caption under them. |
 
 ### Don'ts
 
-1. **No competing lights.** Never put two white primary buttons, two glows, or a cobalt fill behind a large area in one view. The signal only works if it is singular.
-2. **No new hues or rainbow gradients.** Color comes from cobalt, platinum, violet and the neutrals. Semantic colors appear only to report status, never as decoration.
-3. **No hard edges or heavy chrome.** No square buttons, borders of 2px or more, opaque grey cards, or light-mode drop shadows. Edges are 1px white hairlines at 8–16% opacity.
+1. **No competing lights.** Never put two steel primary buttons, two glows or a large amber fill in one view. The signal only works if it is singular.
+2. **No gradient text.** The two-tone headline is two solid colors.
+3. **No soft, bubbly rectangles.** Cards stay at 8-12px radius; only actions are pills.
+4. **No hardcoded values in components.** Colors, fonts, radii and gradients come from the tokens in `web/app/globals.css`.
+5. **No amber for warnings.** Use `warning` (yellow) so a warning is never confused with a selected or focused state.
 
 ---
 
 ## 2. Color
 
-As a rough budget, about 85% of any screen is background and neutrals, 10% is white text and actions, and 5% is brand color. All contrast ratios below are measured against the page background `#07080F` unless stated otherwise.
+All tokens are defined once in `web/app/globals.css` (`@theme` block). The `--color-primary-*` scale is the molten accent (the names were kept from Nocturne so components keep working).
 
-### Brand
-
-#### Primary: Cobalt (`color.primary.*`)
-Used for brand moments: the hero object, focus rings, selected states, progress, check icons, and the filled confirm button inside the product. **Use 300 for brand text on dark.**
-
-| Token | Hex | Notes |
-|---|---|---|
-| `color.primary.300` | `#8C98FF` | Links and brand text on dark (7.66:1) |
-| `color.primary.400` | `#6474FA` | Focus border on inputs |
-| `color.primary.500` | `#4255F5` | **Base.** Fills and icons only on dark (3.66:1) |
-| `color.primary.600` | `#2F3FD6` | Gradient mid-stop; white text 7.49:1 |
-| `color.primary.700` | `#1E2690` | Gradient end-stop |
-
-#### Secondary: Platinum (`color.secondary.*`)
-The cool metallic counterpart to cobalt. Used for secondary product objects, illustration, avatars, chart series 2, and subtle highlights on dark cards.
-
-| Token | Hex |
-|---|---|
-| `color.secondary.100` | `#ECEEF3` |
-| `color.secondary.200` | `#DADDE6` |
-| `color.secondary.300` | `#C7CBD6` (**base**) |
-| `color.secondary.400` | `#9AA0B2` |
-| `color.secondary.500` | `#6E7488` |
-
-#### Accent: Aurora (`color.accent.*`)
-A rare spark only: the logo dot, new-feature badges, the second stop of the hero glow, a chart highlight. **Never more than one accent element per viewport.**
-
-| Token | Hex |
-|---|---|
-| `color.accent.200` | `#DDD3FE` |
-| `color.accent.300` | `#C4B2FC` |
-| `color.accent.400` | `#A78BFA` (**base**) |
-| `color.accent.500` | `#8B67F0` |
-| `color.accent.600` | `#6D48D4` |
-
-### Neutral scale (`color.neutral.*`)
-Cool-tinted slate, hue 230°.
+### Brand: Molten (`color.primary.*`)
 
 | Token | Hex | Use |
 |---|---|---|
-| `neutral.50` | `#F5F6FA` | Primary text, primary button fill |
-| `neutral.100` | `#E8EAF2` | Pressed primary button, nav labels |
-| `neutral.200` | `#CDD1E0` | Emphasised secondary text |
-| `neutral.300` | `#A9AEC4` | Secondary text, body copy |
-| `neutral.400` | `#7F85A0` | Muted text, captions, placeholders |
-| `neutral.500` | `#5C627D` | Disabled text, icons |
-| `neutral.600` | `#424760` | Strong dividers, disabled ghost button |
-| `neutral.700` | `#2D3148` | Opaque borders, scrollbars |
-| `neutral.800` | `#1A1D2E` | Surface 2, tooltips |
-| `neutral.900` | `#0E1020` | Surface 1, opaque cards |
-| `neutral.950` | `#07080F` | Page background |
+| `primary.300` | `#FFB15C` | **Light.** Text on dark (overlines, links, citations), focus ring offset color |
+| `primary.400` | `#F79D3E` | Hover on amber fills |
+| `primary.500` | `#F08A24` | **Base.** Focus ring, selected state, progress bars, approve action |
+| `primary.600` | `#D9731A` | Pressed amber fill |
+| `primary.700` | `#B85A10` | **Deep.** Ember glow edge, gradient end |
+
+Text on `primary.500` fills is `text.inverse` (`#0E1012`), never white (white on amber is only 2.4:1).
+
+### Secondary: Steel (`color.secondary.*`)
+
+| Token | Hex |
+|---|---|
+| `secondary.100` | `#EEF0F2` |
+| `secondary.200` | `#D8DCE0` |
+| `secondary.300` | `#C2C7CD` |
+| `secondary.400` | `#9AA1A9` |
+| `secondary.500` | `#6F767F` |
+
+`color.accent.*` aliases the molten scale (Foundry has one accent).
+
+### Neutral scale (`color.neutral.*`), cool steel gray, hue about 210
+
+| Token | Hex | Use |
+|---|---|---|
+| `neutral.50` | `#F3F5F6` | |
+| `neutral.100` | `#ECEEF0` | Primary text |
+| `neutral.200` | `#D2D6DA` | |
+| `neutral.300` | `#A8AEB6` | Secondary text |
+| `neutral.400` | `#7C838C` | Muted text |
+| `neutral.500` | `#5A6068` | |
+| `neutral.600` | `#3E444B` | |
+| `neutral.700` | `#2A2F36` | Surface 3 |
+| `neutral.800` | `#1F2329` | Surface 2 |
+| `neutral.900` | `#16191D` | Surface 1 |
+| `neutral.950` | `#0E1012` | Canvas |
 
 ### Background & surfaces
 
 | Token | Value | Use |
 |---|---|---|
-| `bg.canvas` | `#07080F` | Page background everywhere |
-| `bg.glow` | `radial-gradient(60% 55% at 65% 40%, rgba(66,85,245,0.55), transparent 70%)` | Ambient light behind the hero object. **One per view.** |
-| `surface.1` | `#0E1020` | Opaque cards, sidebars, tables |
-| `surface.2` | `#1A1D2E` | Raised items inside surface 1, menus, tooltips |
-| `surface.glass` | `rgba(255,255,255,0.04)` + `backdrop-filter: blur(20px)` | Translucent panels over imagery or glow: nav, stat bar, floating chips |
-| `surface.overlay` | `rgba(18,20,42,0.85)` + `backdrop-filter: blur(24px)` | Modals, popovers, sheets |
-| `surface.scrim` | `rgba(5,6,11,0.72)` + `backdrop-filter: blur(8px)` | Behind modals |
+| `bg.canvas` | `#0E1012` | Page background everywhere |
+| `bg.glow` | `radial-gradient(60% 55% at 65% 40%, rgba(240,138,36,0.40), rgba(184,90,16,0.12) 45%, transparent 72%)` | Warm ember behind the hero. **One per view.** |
+| `surface.1` | `#16191D` | Cards (plates), sidebars, tables |
+| `surface.2` | `#1F2329` | Raised items inside surface 1, menus, tooltips |
+| `surface.3` | `#2A2F36` | Selected nav pills, pressed items |
+| `surface.glass` | `rgba(255,255,255,0.04)` | Translucent layers over the glow |
+| `surface.overlay` | `rgba(22,25,29,0.88)` + blur | Modals, popovers |
+| `surface.scrim` | `rgba(5,7,8,0.72)` + blur | Behind modals |
 
 ### Text
 
-| Token | Hex | Contrast | Use |
+| Token | Hex | Contrast on canvas | Use |
 |---|---|---|---|
-| `text.primary` | `#F5F6FA` | 18.5:1 | Headlines, body emphasis, button labels on dark |
-| `text.secondary` | `#A9AEC4` | 9.1:1 | Body copy, descriptions, nav items at rest |
-| `text.muted` | `#7F85A0` | 5.5:1 | Captions, metadata, placeholders, headline second line |
-| `text.disabled` | `#5C627D` | 3.3:1 ⚠️ | Disabled labels only. Never for readable content. |
-| `text.brand` | `#8C98FF` | 7.7:1 | Links, eyebrows, inline brand emphasis |
-| `text.inverse` | `#07080F` | 18.5:1 on `neutral.50` | Labels on white primary buttons and semantic fills |
+| `text.primary` | `#ECEEF0` | 16:1 | Headlines, emphasis |
+| `text.secondary` | `#A8AEB6` | 8:1 | Body copy, descriptions |
+| `text.muted` | `#7C838C` | 4.9:1 | Captions, metadata, headline second line |
+| `text.disabled` | `#555B63` | 2.7:1 (warning) | Disabled labels only |
+| `text.brand` | `#FFB15C` | 10:1 | Overlines, links, citations |
+| `text.inverse` | `#0E1012` | 14:1 on steel, 8:1 on amber | Labels on steel and amber fills |
 
 ### Borders
 
 | Token | Value | Use |
 |---|---|---|
-| `border.subtle` | `1px solid rgba(255,255,255,0.08)` | Dividers inside cards, table rows |
-| `border.default` | `1px solid rgba(255,255,255,0.12)` | Cards, inputs, nav pill, glass panels |
-| `border.strong` | `1px solid rgba(255,255,255,0.20)` | Hover on inputs and secondary buttons |
-| `border.focus` | `2px solid #6474FA` | Focused inputs |
-| `ring.focus` | `0 0 0 2px #07080F, 0 0 0 4px #8C98FF` | Focus ring on every interactive element (2px ring, 2px offset) |
+| `border.subtle` | `rgba(255,255,255,0.07)` | Dividers inside a plate |
+| `border.default` | `rgba(255,255,255,0.10)` | Card and input hairlines |
+| `border.strong` | `rgba(255,255,255,0.18)` | Hover, dashed placeholders |
+| `border.focus` | `#F08A24` | Focus and selected |
 
 ### Semantic
 
-All four are tuned for dark backgrounds. **Solid fills take `#07080F` labels, never white.**
-
-| Token | Hex | As text | Tint (fill) | Border | Use |
-|---|---|---|---|---|---|
-| `success` | `#3DD68C` | 10.7:1 | `rgba(61,214,140,0.12)` | `rgba(61,214,140,0.28)` | Completed payments, verified, saved |
-| `warning` | `#F5B544` | 11.0:1 | `rgba(245,181,68,0.12)` | `rgba(245,181,68,0.28)` | Pending, limits near, needs review |
-| `error` | `#F26D6D` | 6.8:1 | `rgba(242,109,109,0.12)` | `rgba(242,109,109,0.28)` | Failed, declined, invalid input, destructive |
-| `info` | `#5AA9F5` | 8.0:1 | `rgba(90,169,245,0.12)` | `rgba(90,169,245,0.28)` | Neutral notices, tips, scheduled |
+| Token | Hex | Use |
+|---|---|---|
+| `success` | `#3DD68C` | Live, passed, on track |
+| `warning` | `#E8C547` | Budget at 80%, paused, needs attention (yellow, not amber) |
+| `error` | `#F26D6D` | Failed, blocked, over cap |
+| `info` | `#5AA9F5` | Neutral information |
 
 ### Contrast concerns (WCAG 2.2)
 
-- **Cobalt 500 `#4255F5` is not a text color on dark.** At 3.66:1 on `#07080F` it passes for UI shapes and icons (3:1) but fails body text. Use Cobalt 300 `#8C98FF` (7.66:1) for links and brand text.
-- **White on cobalt is fine.** `#FFFFFF` on Cobalt 500 is 5.46:1 and on Cobalt 600 is 7.49:1, so the brand card and a filled cobalt button can carry white labels.
-- **The lightest readable text is Neutral 400 `#7F85A0` (5.49:1).** Neutral 500 is for disabled text only (3.33:1, which WCAG exempts for disabled elements).
-- **Semantic fills need dark labels.** White text on success, warning, error or info falls to 1.8–2.9:1. Label solid fills with `#07080F`.
-- **Glass lowers contrast unpredictably.** Check text on translucent surfaces against the brightest thing behind it, usually the glow. Keep at least a 0.04 white fill plus 20px blur.
-- **Hairlines are decorative.** Borders at 8–12% white fall below 3:1, so never let a border alone mark an input or a selected state. Pair it with a fill, a focus ring or text.
+- `text.disabled` fails 4.5:1. Use it only on disabled controls, never for readable content.
+- Never put white text on an amber fill. Use `text.inverse`.
+- Status is never shown by color alone: badges carry a label, and meters carry a number.
 
 ---
 
 ## 3. Typography
 
 ### Font families
-Both are free on Google Fonts under the OFL license.
 
-| Role | Family | Weights | Stack |
+All three are free on Google Fonts (OFL) and loaded with `next/font/google` in `web/app/layout.tsx` as CSS variables.
+
+| Role | Family | Weights | Variable |
 |---|---|---|---|
-| UI, display & body | **Geist** | 400 · 500 · 600 | `'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif` |
-| Data, labels, code | **Geist Mono** | 400 · 500 | `'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace` |
+| Headings, display, wordmark | **IBM Plex Serif** | 500 · 600 | `--font-plex-serif` → `font-serif` |
+| UI and body | **Geist** | 400 · 500 · 600 | `--font-geist-sans` → `font-sans` |
+| Overlines, labels, table headers, data, numbers, code | **Geist Mono** | 400 · 500 | `--font-geist-mono` → `font-mono` |
 
-```html
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
-```
-
-Use `font-feature-settings: 'tnum' 1` (or `font-variant-numeric: tabular-nums`) on figures. Use Geist Mono for overlines, card numbers, IDs, code and token names.
+`h1`-`h4` and `CardTitle` use Plex Serif by default (base layer). Use `font-variant-numeric: tabular-nums` on figures.
 
 ### Type scale
 
-| Token | Size | Line height | Weight | Letter spacing | Use when |
-|---|---|---|---|---|---|
-| `type.display-xl` | 72px | 1.02 | 600 | -0.035em | Hero headline only. One per page. |
-| `type.display` | 56px | 1.05 | 600 | -0.03em | Section openers on marketing pages, board titles |
-| `type.h1` | 44px | 1.1 | 600 | -0.025em | Page title inside the product. One per screen. |
-| `type.h2` | 32px | 1.15 | 600 | -0.02em | Section headings, modal hero titles |
-| `type.h3` | 24px | 1.25 | 600 | -0.015em | Card titles, modal titles, sub-sections |
-| `type.h4` | 18px | 1.35 | 600 | -0.01em | Small card titles, list group headings |
-| `type.stat` | 32px | 1 | 500 | -0.02em | Key figures with tabular numerals and a caption beneath |
-| `type.body-l` | 18px | 1.55 | 400 | -0.005em | Hero lead paragraph, intro copy (`text.secondary`) |
-| `type.body` | 16px | 1.55 | 400 | 0 | Default reading text in the product and docs |
-| `type.body-s` | 14px | 1.5 | 400 | 0 | Card descriptions, table cells, dense lists |
-| `type.label` | 14px | 1 | 500 | 0 | Buttons, nav items, tabs. Form labels use 13px. |
-| `type.caption` | 12px | 1.4 | 400 | 0.01em | Captions under stats, helper text, timestamps (`text.muted`) |
-| `type.overline` | 11px | 1.2 | 500 | 0.08em | **Geist Mono, uppercase.** Above section titles, table headers (`text.brand`) |
+| Token | Size | Line height | Weight | Letter spacing | Font | Use when |
+|---|---|---|---|---|---|---|
+| `type.h1` | 44px (32px below 768px) | 1.1 | 500 | -0.02em | Serif | Page title inside the product. One per screen. |
+| `type.h3` | 24px | 1.25 | 500 | -0.015em | Serif | Card titles, approval titles, sub-sections |
+| `type.h4` | 18px | 1.35 | 600 | -0.01em | Serif | Small card titles, list group headings |
+| `type.stat` | 32px | 1 | 500 | -0.02em | Mono | Key figures, tabular, with an overline caption beneath |
+| `type.body-l` | 18px | 1.55 | 400 | -0.005em | Sans | Hero lead paragraph (`text.secondary`) |
+| `type.body` | 16px | 1.55 | 400 | 0 | Sans | Default reading text |
+| `type.body-s` | 14px | 1.5 | 400 | 0 | Sans | Card descriptions, table cells |
+| `type.label` | 14px | 1 | 500 | 0 | Sans | Buttons, nav items, tabs |
+| `type.caption` | 12px | 1.4 | 400 | 0.01em | Sans | Helper text, timestamps (`text.muted`) |
+| `type.overline` | 11px | 1.2 | 500 | **0.12em** | **Mono, uppercase** | Above section titles, table headers, stat captions, tags (`text.brand` or `text.muted`) |
+| `type.wordmark` | 16px | 1 | 600 | **0.18em** | Serif, uppercase | "FOUNDRY" with a small amber spark (`bg-spark`) |
 
 ### Rules
 
-- **Responsive steps.** Below 768px: Display XL 72→44, Display 56→40, H1 44→32, H2 32→26, H3 24→20. Body sizes never shrink. Use `clamp()`:
-  - Display XL: `clamp(44px, 5vw + 1rem, 72px)`
-  - Display: `clamp(40px, 4vw + 1rem, 56px)`
-  - H2: `clamp(26px, 2vw + 1rem, 32px)`
-- **Pairing.** Use one display level per section. Gap from headline to body is 24px; from overline to headline it is 16px. Maximum line length is 560px for body text and 760px for headlines. Use sentence case everywhere except Overline.
-- **Weights.** 600 for headings only, 500 for labels, buttons and numerals, 400 for reading. Never 700 or heavier: on dark backgrounds, heavy weights bloom and look shouted.
+- **Headline pairing.** Claim in `text.primary`, the finishing thought in `text.muted` on the next line. Gap from overline to headline is 16px. Body copy stops at 560px.
+- **Weights.** 500/600 for serif headings, 500 for labels and numerals, 400 for reading. Never 700 or heavier.
+- **Mono is for measuring.** Anything that is a label, a count, a cost, an ID, a tool name or a citation chip is Geist Mono; sentences are never mono.
 
 ---
 
@@ -252,12 +229,12 @@ Use `font-feature-settings: 'tnum' 1` (or `font-variant-numeric: tabular-nums`) 
 
 | Token | Value | Use |
 |---|---|---|
-| `radius.xs` | 6px | Checkboxes, tiny tags, code |
-| `radius.sm` | 10px | Menu items, swatches, tooltips |
-| `radius.md` | 12px | Inputs, selects, small tiles |
-| `radius.lg` | 16px | Floating chips, toasts, list cards |
-| `radius.xl` | 20px | Cards, glass panels, stat bars |
-| `radius.2xl` | 28px | Modals, hero objects, brand cards |
+| `radius.xs` | 4px | Checkboxes, tiny tags, code |
+| `radius.sm` | 6px | Menu items, swatches, tooltips |
+| `radius.md` | 8px | Inputs, selects, small tiles, icon tiles |
+| `radius.lg` | 10px | Floating chips, toasts, list cards |
+| `radius.xl` | 12px | Cards (machined plates), panels, stat bars |
+| `radius.2xl` | 16px | Modals, chat bubbles, hero objects |
 | `radius.pill` | 999px | Buttons, nav, badges, avatars |
 
 ### Border widths
@@ -279,15 +256,18 @@ Never use borders thicker than 2px.
 | `e2` | `inset 0 1px 0 rgba(255,255,255,0.08), 0 8px 24px -8px rgba(0,0,0,0.60)` | Hovered cards, floating chips |
 | `e3` | `inset 0 1px 0 rgba(255,255,255,0.08), 0 24px 48px -12px rgba(0,0,0,0.70)` | Menus, popovers, sticky nav |
 | `e4` | `0 0 0 1px rgba(255,255,255,0.08), 0 40px 80px -20px rgba(0,0,0,0.80)` | Modals, sheets |
-| `glow.brand` | `0 24px 60px -16px rgba(66,85,245,0.55)` | Under cobalt brand objects |
+| `glow.brand` | `0 14px 40px -16px rgba(240,138,36,0.25)` | Under molten brand objects (approval card) |
 
 ### Gradients
 
 | Token | Value | Use |
 |---|---|---|
-| `gradient.glow` | `radial-gradient(60% 55% at 65% 40%, rgba(66,85,245,0.55), transparent 70%)`, with an optional aurora stop `radial-gradient(30% 30% at 40% 70%, rgba(167,139,250,0.22), transparent 70%)` | Behind the hero object only |
-| `gradient.cobalt` | `linear-gradient(135deg, #5468F5 0%, #2F3FD6 55%, #1E2690 100%)` + `inset 0 1px 0 rgba(255,255,255,0.25)` | Brand objects: card art, feature tile, app icon |
-| `gradient.platinum` | `linear-gradient(135deg, #ECEEF3 0%, #C7CBD6 50%, #9AA0B2 100%)` + `inset 0 1px 0 rgba(255,255,255,0.7)` | Secondary objects. Text on it uses `#07080F`. |
+| `gradient.glow` (`bg-glow`) | `radial-gradient(60% 55% at 65% 40%, rgba(240,138,36,0.40), rgba(184,90,16,0.12) 45%, transparent 72%)` | Warm ember behind the hero. **One per view.** |
+| `gradient.steel` (`bg-steel`) | `linear-gradient(180deg, #F2F4F6 0%, #C9CED4 55%, #A3AAB2 100%)` + `inset 0 1px 0 rgba(255,255,255,0.6)` | Primary action pill. Label `#0E1012`. |
+| `gradient.molten` (`bg-molten`) | `linear-gradient(180deg, #FFB15C 0%, #F08A24 55%, #D9731A 100%)` + `inset 0 1px 0 rgba(255,255,255,0.45)` | Approve / spend actions and the user chat bubble. Label `#0E1012`. |
+| `gradient.plate` (`bg-plate`) | `linear-gradient(180deg, rgba(255,255,255,0.025), transparent 40%)` over `surface.1` | Card sheen, like a top-lit machined plate |
+| `gradient.spark` (`bg-spark`) | `radial-gradient(circle at 35% 30%, #FFD9A6, #F08A24 55%, #B85A10)` + `0 0 10px 2px rgba(240,138,36,0.55)` | The 8px ember beside the wordmark |
+| `texture.brushed` | `repeating-linear-gradient(90deg, rgba(255,255,255,0.011) 0 1px, transparent 1px 3px)` | Canvas grain. Never above 3% opacity. |
 
 ### Blur
 
@@ -306,7 +286,7 @@ Use at most 3 blurred layers per view.
 **Global rules**
 
 - All transitions: `160ms cubic-bezier(0.2, 0.8, 0.2, 1)`
-- Focus ring everywhere: `0 0 0 2px #07080F, 0 0 0 4px #8C98FF` (2px ring, 2px offset)
+- Focus ring everywhere: `0 0 0 2px #0E1012, 0 0 0 4px #F08A24` (2px ring, 2px offset)
 - Minimum hit area 40px, or 44px on touch
 
 ### Buttons
@@ -321,89 +301,90 @@ Shape `radius.pill` · label `type.label` (14px / 500) · 8px gap between label 
 | `md` (default) | 40px | 18px | 14px | Everywhere else |
 | `lg` | 48px | 22px | 15px | Hero CTAs |
 
-**Primary**: the one main action per view. A white pill on dark.
+**Primary**: the one main action per view. A brushed-steel pill (`bg-steel`).
 
 | State | Background | Text | Border | Other |
 |---|---|---|---|---|
-| Default | `#F5F6FA` | `#07080F` | none | |
-| Hover | `#FFFFFF` | `#07080F` | none | `box-shadow: 0 0 0 4px rgba(255,255,255,0.08), 0 8px 24px -8px rgba(255,255,255,0.35)` |
-| Pressed | `#E8EAF2` | `#07080F` | none | `transform: scale(0.98)` |
-| Focus | `#F5F6FA` | `#07080F` | none | `ring.focus` |
-| Disabled | `rgba(255,255,255,0.12)` | `#5C627D` | none | `cursor: not-allowed` |
+| Default | `gradient.steel` | `#0E1012` | none | inset 1px top highlight `rgba(255,255,255,0.6)` |
+| Hover | `gradient.steel` | `#0E1012` | none | `filter: brightness(1.1)` |
+| Pressed | `gradient.steel` | `#0E1012` | none | `transform: translateY(1px)` |
+| Focus | `gradient.steel` | `#0E1012` | none | `ring.focus` (amber) |
+| Disabled | `surface.2` | `#555B63` | none | `cursor: not-allowed` |
+
+**Approve** (amber, `bg-molten`): the decision that spends or changes something (approval card, approve spend). Dark label `#0E1012`. Never shown beside a second steel primary in the same group.
 
 **Secondary**: an alternative action beside the primary. An outlined pill.
 
 | State | Background | Text | Border | Other |
 |---|---|---|---|---|
-| Default | `transparent` | `#F5F6FA` | `1px solid rgba(255,255,255,0.16)` | |
-| Hover | `rgba(255,255,255,0.06)` | `#F5F6FA` | `1px solid rgba(255,255,255,0.24)` | |
-| Pressed | `rgba(255,255,255,0.10)` | `#F5F6FA` | `1px solid rgba(255,255,255,0.24)` | `transform: scale(0.98)` |
-| Focus | `transparent` | `#F5F6FA` | `1px solid rgba(255,255,255,0.16)` | `ring.focus` |
-| Disabled | `transparent` | `#5C627D` | `1px solid rgba(255,255,255,0.08)` | `cursor: not-allowed` |
+| Default | `transparent` | `#ECEEF0` | `1px solid rgba(255,255,255,0.16)` | |
+| Hover | `rgba(255,255,255,0.06)` | `#ECEEF0` | `1px solid rgba(255,255,255,0.24)` | |
+| Pressed | `rgba(255,255,255,0.10)` | `#ECEEF0` | `1px solid rgba(255,255,255,0.24)` | `transform: scale(0.98)` |
+| Focus | `transparent` | `#ECEEF0` | `1px solid rgba(255,255,255,0.16)` | `ring.focus` |
+| Disabled | `transparent` | `#555B63` | `1px solid rgba(255,255,255,0.08)` | `cursor: not-allowed` |
 
 **Ghost**: tertiary actions, toolbars, nav links, "Log in". Text only.
 
 | State | Background | Text | Other |
 |---|---|---|---|
-| Default | `transparent` | `#A9AEC4` | |
-| Hover | `rgba(255,255,255,0.06)` | `#F5F6FA` | |
-| Pressed | `rgba(255,255,255,0.10)` | `#F5F6FA` | |
-| Focus | `transparent` | `#F5F6FA` | `ring.focus` |
-| Disabled | `transparent` | `#424760` | `cursor: not-allowed` |
+| Default | `transparent` | `#A8AEB6` | |
+| Hover | `rgba(255,255,255,0.06)` | `#ECEEF0` | |
+| Pressed | `rgba(255,255,255,0.10)` | `#ECEEF0` | |
+| Focus | `transparent` | `#ECEEF0` | `ring.focus` |
+| Disabled | `transparent` | `#3E444B` | `cursor: not-allowed` |
 
-**Destructive confirm** (in modals): fill `#F26D6D`, label `#07080F`.
+**Destructive confirm** (in modals): fill `#F26D6D`, label `#0E1012`.
 
 ### Inputs
 
-Height 44px · horizontal padding 16px · `radius.md` (12px) · text 15px / 400 · label 13px / 500 with an 8px gap below it · helper text 12px / 400.
+Height 44px · horizontal padding 16px · `radius.md` (8px) · text 15px / 400 · label 13px / 500 with an 8px gap below it · helper text 12px / 400.
 
 | State | Fill | Border | Text | Label | Helper | Other |
 |---|---|---|---|---|---|---|
-| Default | `rgba(255,255,255,0.04)` | `rgba(255,255,255,0.12)` | `#F5F6FA` | `#A9AEC4` | `#7F85A0` | placeholder `#7F85A0` |
-| Hover | `rgba(255,255,255,0.05)` | `rgba(255,255,255,0.20)` | `#F5F6FA` | `#A9AEC4` | `#7F85A0` | |
-| Focus | `rgba(255,255,255,0.05)` | `#6474FA` | `#F5F6FA` | `#F5F6FA` | `#7F85A0` | `box-shadow: 0 0 0 4px rgba(66,85,245,0.25)` |
-| Error | `rgba(242,109,109,0.06)` | `#F26D6D` | `#F5F6FA` | `#A9AEC4` | `#F26D6D` + icon | |
-| Disabled | `rgba(255,255,255,0.02)` | `rgba(255,255,255,0.06)` | `#5C627D` | `#5C627D` | `#5C627D` | |
+| Default | `rgba(255,255,255,0.04)` | `rgba(255,255,255,0.12)` | `#ECEEF0` | `#A8AEB6` | `#7C838C` | placeholder `#7C838C` |
+| Hover | `rgba(255,255,255,0.05)` | `rgba(255,255,255,0.20)` | `#ECEEF0` | `#A8AEB6` | `#7C838C` | |
+| Focus | `rgba(255,255,255,0.05)` | `#F08A24` | `#ECEEF0` | `#ECEEF0` | `#7C838C` | `box-shadow: 0 0 0 4px rgba(240,138,36,0.22)` |
+| Error | `rgba(242,109,109,0.06)` | `#F26D6D` | `#ECEEF0` | `#A8AEB6` | `#F26D6D` + icon | |
+| Disabled | `rgba(255,255,255,0.02)` | `rgba(255,255,255,0.06)` | `#555B63` | `#555B63` | `#555B63` | |
 
 ### Cards
 
 | Variant | Padding | Radius | Fill | Border | Shadow | Notes |
 |---|---|---|---|---|---|---|
-| **Content card** | 24px | 20px | `rgba(255,255,255,0.04)` | `border.default` | `e1` | 12px gap. Icon tile, H4 title, Body S description. |
-| Content card: hover | 24px | 20px | `rgba(255,255,255,0.05)` | `rgba(255,255,255,0.20)` | `e2` | `transform: translateY(-2px)`; focus uses `ring.focus` on the whole card |
+| **Content card** | 24px | 12px | `surface.1` + `gradient.plate` | `border.default` | `e1` (top-edge highlight) | 12px gap. Icon tile, H4 title, Body S description. |
+| Content card: hover | 24px | 12px | `surface.1` | `border.strong` | `e2` | `transform: translateY(-2px)`; focus uses `ring.focus` on the whole card |
 | **Stat bar** | 24px per cell | 20px | `rgba(255,255,255,0.03)` | `border.default` | none | `type.stat` + `type.caption`; `border.subtle` between cells |
-| **Floating chip** | 12px 16px | 16px | `rgba(255,255,255,0.06)` + `blur.glass` | `rgba(255,255,255,0.14)` | `e2` | 32px round icon (`#4255F5` fill, white check), 12px gap |
-| **Brand object** | | 28px | `gradient.cobalt` | none | `glow.brand` | Hero object only |
+| **Floating chip** | 12px 16px | 16px | `rgba(255,255,255,0.06)` + `blur.glass` | `rgba(255,255,255,0.14)` | `e2` | 32px round icon (`#F08A24` fill, dark check), 12px gap |
+| **Brand object** | | 16px | `gradient.molten` | none | `glow.brand` | Hero object only |
 
-**Icon tile** (inside a content card): 40×40px, radius 12px, fill `rgba(66,85,245,0.16)`, border `rgba(100,116,250,0.30)`, 20px stroke icon in `#8C98FF`, stroke width 1.75.
+**Icon tile** (inside a content card): 40×40px, radius 8px, fill `rgba(240,138,36,0.16)`, border `rgba(240,138,36,0.30)`, 20px stroke icon in `#FFB15C`, stroke width 1.75.
 
 ### Navigation bar
 
 | Part | Spec |
 |---|---|
 | Bar | Height 72px, `container.wide` (1360px). When sticky: `surface.glass` + `blur.glass` + `border.subtle` along the bottom. |
-| Brand | 24px logo tile with radius 7px and `gradient.cobalt`, plus the wordmark at 16px / 600 / -0.01em, 10px gap |
+| Brand | 8px amber spark (`gradient.spark`) plus the wordmark "FOUNDRY" in Plex Serif 600, 16px, uppercase, tracking 0.18em, 10px gap |
 | Item group | Pill container, 4px padding, `border.default`, fill `rgba(255,255,255,0.03)`, 2px gap |
 | Item | Height 36px, horizontal padding 16px, 14px / 500, pill radius |
-| Item: rest | Text `#A9AEC4` |
-| Item: hover | Fill `rgba(255,255,255,0.05)`, text `#F5F6FA` |
-| Item: active | Fill `rgba(255,255,255,0.10)`, text `#F5F6FA`, `aria-current="page"` |
+| Item: rest | Text `#A8AEB6` |
+| Item: hover | Fill `rgba(255,255,255,0.05)`, text `#ECEEF0` |
+| Item: active | Fill `surface.3` (`#2A2F36`), top highlight, text `#ECEEF0`, `aria-current="page"` |
 | Item: focus | `ring.focus` |
 | Right side | Ghost "Log in" + a CTA button (8px gap). Use secondary when the hero already shows a primary button (one primary per view). |
 | Mobile (under 768px) | Items collapse into a 40px ghost menu button that opens a full-height overlay sheet (see proposal 4) |
 
 ### Badges
 
-Height 24px · horizontal padding 10px · `radius.pill` · 12px / 500 · 6px dot · 6px gap.
+Height 24px · horizontal padding 10px · `radius.pill` · Geist Mono 11px / 500, uppercase, tracking 0.12em on status badges · 6px dot · 6px gap.
 Fill = the color at 12% · border = the color at 28% · text and dot = the color.
 
 | Variant | Fill | Border | Text / dot |
 |---|---|---|---|
-| Neutral | `rgba(255,255,255,0.08)` | `rgba(255,255,255,0.12)` | `#CDD1E0` |
-| Brand | `rgba(66,85,245,0.18)` | `rgba(100,116,250,0.30)` | `#8C98FF` |
-| New (accent) | `rgba(167,139,250,0.12)` | `rgba(167,139,250,0.28)` | `#A78BFA` |
+| Neutral | `rgba(255,255,255,0.08)` | `rgba(255,255,255,0.12)` | `#D2D6DA` |
+| Brand (molten) | `rgba(240,138,36,0.18)` | `rgba(240,138,36,0.30)` | `#FFB15C` |
 | Success | `rgba(61,214,140,0.12)` | `rgba(61,214,140,0.28)` | `#3DD68C` |
-| Warning | `rgba(245,181,68,0.12)` | `rgba(245,181,68,0.28)` | `#F5B544` |
+| Warning (yellow, not amber) | `rgba(232,197,71,0.12)` | `rgba(232,197,71,0.28)` | `#E8C547` |
 | Error | `rgba(242,109,109,0.12)` | `rgba(242,109,109,0.28)` | `#F26D6D` |
 | Info | `rgba(90,169,245,0.12)` | `rgba(90,169,245,0.28)` | `#5AA9F5` |
 
@@ -414,128 +395,69 @@ Badges show status and are not buttons, so they have no hover state. If somethin
 | Part | Spec |
 |---|---|
 | Width | 480px (sm) / 640px (md) |
-| Container | Padding 32px, `radius.2xl` (28px), `surface.overlay` + `blur.overlay`, shadow `e4`, 24px gap between blocks |
-| Scrim | `rgba(5,6,11,0.72)` + `blur.scrim`. Clicking it closes the modal unless the action is destructive. |
-| Header | H3 title (24px / 600), Body description at 15px in `#A9AEC4`, 8px gap |
-| Close button | 36px round ghost button, fill `rgba(255,255,255,0.06)`, icon `#A9AEC4`, top-right, `aria-label="Close"` |
+| Container | Padding 32px, `radius.2xl` (16px), `surface.overlay` + `blur.overlay`, shadow `e4`, 24px gap between blocks |
+| Scrim | `rgba(5,7,8,0.72)` + `blur.scrim`. Clicking it closes the modal unless the action is destructive. |
+| Header | H3 title (24px / 600), Body description at 15px in `#A8AEB6`, 8px gap |
+| Close button | 36px round ghost button, fill `rgba(255,255,255,0.06)`, icon `#A8AEB6`, top-right, `aria-label="Close"` |
 | Body → footer | 24px gap, optional `border.subtle` divider |
 | Footer | Right-aligned, 12px gap: secondary, then primary (or destructive) |
 | Motion | Enter in 200ms: opacity 0→1, scale 0.96→1, y 8px→0. Exit in 140ms, reversed. |
 | Accessibility | `role="dialog"` and `aria-modal="true"`. Trap focus, put first focus on the least destructive action, close on Esc, and return focus to the trigger. |
-| Mobile | Becomes a bottom sheet: full width, radius `28px 28px 0 0`, 24px padding, buttons stacked full width |
+| Mobile | Becomes a bottom sheet: full width, radius `16px 16px 0 0`, 24px padding, buttons stacked full width |
 
 ---
 
 ## 7. CSS custom properties
 
-A starting point for implementation.
+The source of truth is the `@theme inline` block in `web/app/globals.css`. This is a summary of its names and values.
 
 ```css
-:root {
-  /* Brand */
-  --color-primary-300: #8C98FF;
-  --color-primary-400: #6474FA;
-  --color-primary-500: #4255F5;
-  --color-primary-600: #2F3FD6;
-  --color-primary-700: #1E2690;
+@theme inline {
+  /* Fonts */
+  --font-sans: var(--font-geist-sans), ...;
+  --font-serif: var(--font-plex-serif), ui-serif, Georgia, serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, ...;
+  --tracking-overline: 0.12em;
+  --tracking-wordmark: 0.18em;
 
-  --color-secondary-100: #ECEEF3;
-  --color-secondary-200: #DADDE6;
-  --color-secondary-300: #C7CBD6;
-  --color-secondary-400: #9AA0B2;
-  --color-secondary-500: #6E7488;
+  /* Molten accent */
+  --color-primary-300: #ffb15c; --color-primary-400: #f79d3e; --color-primary-500: #f08a24;
+  --color-primary-600: #d9731a; --color-primary-700: #b85a10;
 
-  --color-accent-200: #DDD3FE;
-  --color-accent-300: #C4B2FC;
-  --color-accent-400: #A78BFA;
-  --color-accent-500: #8B67F0;
-  --color-accent-600: #6D48D4;
+  /* Neutrals (cool steel, hue ~210) */
+  --color-neutral-50: #f3f5f6;  --color-neutral-100: #eceef0; --color-neutral-200: #d2d6da;
+  --color-neutral-300: #a8aeb6; --color-neutral-400: #7c838c; --color-neutral-500: #5a6068;
+  --color-neutral-600: #3e444b; --color-neutral-700: #2a2f36; --color-neutral-800: #1f2329;
+  --color-neutral-900: #16191d; --color-neutral-950: #0e1012;
 
-  /* Neutrals */
-  --neutral-50:  #F5F6FA;
-  --neutral-100: #E8EAF2;
-  --neutral-200: #CDD1E0;
-  --neutral-300: #A9AEC4;
-  --neutral-400: #7F85A0;
-  --neutral-500: #5C627D;
-  --neutral-600: #424760;
-  --neutral-700: #2D3148;
-  --neutral-800: #1A1D2E;
-  --neutral-900: #0E1020;
-  --neutral-950: #07080F;
-
-  /* Background & surfaces */
-  --bg-canvas: #07080F;
-  --surface-1: #0E1020;
-  --surface-2: #1A1D2E;
-  --surface-glass: rgba(255, 255, 255, 0.04);
-  --surface-overlay: rgba(18, 20, 42, 0.85);
-  --surface-scrim: rgba(5, 6, 11, 0.72);
-
-  /* Text */
-  --text-primary: #F5F6FA;
-  --text-secondary: #A9AEC4;
-  --text-muted: #7F85A0;
-  --text-disabled: #5C627D;
-  --text-brand: #8C98FF;
-  --text-inverse: #07080F;
+  /* Surfaces and text */
+  --color-canvas: #0e1012;
+  --color-surface-1: #16191d; --color-surface-2: #1f2329; --color-surface-3: #2a2f36;
+  --color-text-primary: #eceef0; --color-text-secondary: #a8aeb6; --color-text-muted: #7c838c;
+  --color-text-disabled: #555b63; --color-text-brand: #ffb15c; --color-text-inverse: #0e1012;
 
   /* Borders */
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-default: rgba(255, 255, 255, 0.12);
-  --border-strong: rgba(255, 255, 255, 0.20);
-  --border-focus: #6474FA;
-  --ring-focus: 0 0 0 2px #07080F, 0 0 0 4px #8C98FF;
+  --color-border-subtle: rgba(255,255,255,0.07);
+  --color-border-default: rgba(255,255,255,0.10);
+  --color-border-strong: rgba(255,255,255,0.18);
+  --color-border-focus: #f08a24;
 
   /* Semantic */
-  --success: #3DD68C;
-  --warning: #F5B544;
-  --error:   #F26D6D;
-  --info:    #5AA9F5;
-
-  /* Typography */
-  --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
-
-  /* Spacing */
-  --space-1: 4px;   --space-2: 8px;   --space-3: 12px;  --space-4: 16px;
-  --space-5: 20px;  --space-6: 24px;  --space-8: 32px;  --space-10: 40px;
-  --space-12: 48px; --space-16: 64px; --space-20: 80px; --space-24: 96px;
-  --space-32: 128px;
-
-  /* Containers */
-  --container-wide: 1360px;
-  --container-default: 1200px;
-  --container-narrow: 720px;
-  --measure-body: 560px;
+  --color-success: #3dd68c; --color-warning: #e8c547; --color-error: #f26d6d; --color-info: #5aa9f5;
 
   /* Radius */
-  --radius-xs: 6px;  --radius-sm: 10px; --radius-md: 12px; --radius-lg: 16px;
-  --radius-xl: 20px; --radius-2xl: 28px; --radius-pill: 999px;
+  --radius-xs: 4px; --radius-sm: 6px; --radius-md: 8px; --radius-lg: 10px;
+  --radius-xl: 12px; --radius-2xl: 16px; --radius-pill: 999px;
 
   /* Elevation */
-  --e0: none;
-  --e1: inset 0 1px 0 rgba(255,255,255,0.06), 0 1px 2px rgba(0,0,0,0.40);
-  --e2: inset 0 1px 0 rgba(255,255,255,0.08), 0 8px 24px -8px rgba(0,0,0,0.60);
-  --e3: inset 0 1px 0 rgba(255,255,255,0.08), 0 24px 48px -12px rgba(0,0,0,0.70);
-  --e4: 0 0 0 1px rgba(255,255,255,0.08), 0 40px 80px -20px rgba(0,0,0,0.80);
-  --glow-brand: 0 24px 60px -16px rgba(66,85,245,0.55);
-
-  /* Gradients */
-  --gradient-glow: radial-gradient(60% 55% at 65% 40%, rgba(66,85,245,0.55), rgba(66,85,245,0) 70%);
-  --gradient-cobalt: linear-gradient(135deg, #5468F5 0%, #2F3FD6 55%, #1E2690 100%);
-  --gradient-platinum: linear-gradient(135deg, #ECEEF3 0%, #C7CBD6 50%, #9AA0B2 100%);
-  --divider-fade: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.20), rgba(255,255,255,0));
-
-  /* Blur */
-  --blur-glass: blur(20px) saturate(140%);
-  --blur-overlay: blur(24px);
-  --blur-scrim: blur(8px);
+  --shadow-e1: inset 0 1px 0 rgba(255,255,255,0.07), 0 1px 2px rgba(0,0,0,0.5);
+  --shadow-e2: inset 0 1px 0 rgba(255,255,255,0.08), 0 8px 24px -8px rgba(0,0,0,0.7);
 
   /* Motion */
-  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
-  --duration: 160ms;
+  --ease-foundry: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
+/* Utilities: bg-glow (ember), bg-steel (primary pill), bg-molten (approve pill),
+   bg-plate (card sheen), bg-spark (wordmark ember). */
 ```
 
 ---
@@ -548,5 +470,5 @@ These came up while building an example page with the system. They are **not par
 2. **Icon set & social links.** Adopt one icon set (e.g. Lucide, free) at 16px and 20px with a 1.75px stroke. A social link becomes either a secondary button with a label and arrow icon, or a 40px round ghost icon button. Decide whether official brand logos may be used.
 3. **Image frame & avatar.** An image frame component with a 4:5 or 1:1 aspect ratio, `radius.2xl`, `border.default` and `glow.brand` behind it, plus a 40px round avatar.
 4. **Mobile menu.** A 40px round ghost menu button and a full-height sheet using `surface.overlay` and the modal's bottom-sheet spec.
-5. **Link hover color.** Links currently hover to `#B7BEFF`, which isn't in the palette. Either add it as `color.primary.200` or keep links at Cobalt 300 and underline them on hover.
+5. **Link hover color.** Links currently hover to `#FFD9A6`, which isn't in the palette. Either add it as `color.primary.200` or keep links at Cobalt 300 and underline them on hover.
 6. **Fluid page margin.** Adopt `page.margin: clamp(16px, 5vw, 80px)` as a token, or keep the fixed per-breakpoint margins (16 / 32 / 48 / 80px).
