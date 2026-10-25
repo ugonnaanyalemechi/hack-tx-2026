@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "playwright test"
+    "test": "playwright test",
+    "placeholders": "node scripts/runtime-placeholders.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

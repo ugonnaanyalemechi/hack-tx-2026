@@ -14,14 +14,10 @@ import {
   mockSetSpendShare,
   subscribeMockBudgets,
 } from "@/lib/api/mock-budgets";
-import {
-  MOCK_AGENT,
-  getSeedChats,
-  mockContinueRun,
-  mockDecideApproval,
-  mockFlagAnswer,
-  mockSendMessage,
-} from "@/lib/mock-chat";
+import { MOCK_AGENT, getSeedChats } from "@/lib/mock-chat";
+import { resolveApiMode } from "@/lib/api/config";
+import { createRuntime, runtimeErrorMessage } from "@/lib/api/runtime-seams";
+import { useIdentity } from "@/lib/identity";
 import type {
   ApprovalDecision,
   ApprovalRequest,
@@ -73,6 +69,11 @@ function ChatPageInner() {
   const forceDecideError = searchParams.get("decideError") === "1";
   const forceFlagError = searchParams.get("flagError") === "1";
   const budgetPreview = searchParams.get("budget");
+
+  // Every runtime-dependent call goes through this seam (lib/api/runtime-seams.ts):
+  // scripted mock events by default, a stub that says what is missing for ?api=live.
+  const [runtime] = useState(() => createRuntime(resolveApiMode()));
+  const { currentUser } = useIdentity();
 
   // The agent's budget state (never its cost) from the mock store, which
   // follows the admin approving spend in another tab.
@@ -297,7 +298,7 @@ function ChatPageInner() {
     setIsStreaming(true);
     let events: AsyncIterable<StreamEvent>;
     try {
-      events = await mockSendMessage(MOCK_AGENT.id, userText, { speed: streamSpeed });
+      events = await runtime.sendMessage(MOCK_AGENT.id, userText, { speed: streamSpeed });
     } catch (error) {
       setIsStreaming(false);
       const code = error instanceof ApiError ? error.code : "";
@@ -314,7 +315,7 @@ function ChatPageInner() {
           message:
             error instanceof ApiError && error.status === 409
               ? "An approval is waiting. Decide it first, then try again."
-              : "Couldn't send your message. Try again in a moment.",
+              : runtimeErrorMessage(error, "Couldn't send your message. Try again in a moment."),
         },
       });
       return;
@@ -328,7 +329,7 @@ function ChatPageInner() {
     setContinueNotice(null);
     const run = pausedRun;
     try {
-      const events = await mockContinueRun(MOCK_AGENT.id, run?.userText ?? null, {
+      const events = await runtime.continueRun(MOCK_AGENT.id, run?.userText ?? null, {
         speed: streamSpeed,
       });
       setPausedRun(null);
@@ -352,7 +353,10 @@ function ChatPageInner() {
             }
           : {
               kind: "error",
-              message: "Couldn't continue. Check your connection and try again.",
+              message: runtimeErrorMessage(
+                error,
+                "Couldn't continue. Check your connection and try again."
+              ),
             }
       );
     }
@@ -386,14 +390,17 @@ function ChatPageInner() {
 
     let events: AsyncIterable<StreamEvent>;
     try {
-      events = await mockDecideApproval(approvalId, decision, {
+      events = await runtime.decideApproval(approvalId, decision, {
         speed: streamSpeed,
         failFirstAttempt: forceDecideError,
       });
-    } catch {
+    } catch (error) {
       patchApproval(chatId, messageId, {
         status: "pending",
-        error: "Couldn't send your decision. Check your connection and try again.",
+        error: runtimeErrorMessage(
+          error,
+          "Couldn't send your decision. Check your connection and try again."
+        ),
       });
       return;
     }
@@ -434,15 +441,25 @@ function ChatPageInner() {
     setFlag(chatId, messageId, { status: "flagging" });
     let events: AsyncIterable<StreamEvent>;
     try {
-      // RUNTIME-PLACEHOLDER(#30): mock flag call; swap for the live flag call and its re-check stream. The ?flagError=1 switch is a mock-only test hook.
-      events = await mockFlagAnswer(messageId, question.text, {
-        speed: streamSpeed,
-        failFirstAttempt: forceFlagError,
-      });
-    } catch {
+      // The ?flagError=1 switch is a mock-only test hook.
+      const flagged = chat.messages[index];
+      events = await runtime.flagAnswer(
+        {
+          agentId: MOCK_AGENT.id,
+          messageId,
+          question: question.text,
+          answer: flagged.role === "assistant" ? (flagged.text ?? "") : "",
+          userId: currentUser?.id ?? "usr_end_user",
+        },
+        { speed: streamSpeed, failFirstAttempt: forceFlagError }
+      );
+    } catch (error) {
       setFlag(chatId, messageId, {
         status: "error",
-        error: "Couldn't send your flag. Check your connection and try again.",
+        error: runtimeErrorMessage(
+          error,
+          "Couldn't send your flag. Check your connection and try again."
+        ),
       });
       return;
     }

@@ -27,7 +27,7 @@ import type {
 import type { AdminQueue, BudgetOut } from "@/lib/contracts/budgets";
 import { ApiError, type ApiClient } from "@/lib/api/client";
 import type { TicketDetail, TicketListItem } from "@/lib/contracts/tickets";
-import { MOCK_TICKETS } from "@/lib/api/mock-tickets";
+import { allMockTickets, persistFiledTickets } from "@/lib/api/mock-tickets";
 import { mockApproveSpend, mockGetBudget, mockListBudgets } from "@/lib/api/mock-budgets";
 import {
   MOCK_AGENTS,
@@ -157,14 +157,14 @@ export function createMockClient(options: MockClientOptions): ApiClient {
     } else if (user.role !== "admin" && user.role !== "builder") {
       throw denied();
     }
-    return MOCK_TICKETS.filter((t) => {
+    return allMockTickets().filter((t) => {
       if (agentId && t.agent_id !== agentId) return false;
       return user.role === "admin" || getAgent(t.agent_id).owner_id === user.id;
     });
   }
 
   function loadTicket(user: UserPublic, ticketId: string): TicketDetail {
-    const ticket = MOCK_TICKETS.find((t) => t.id === ticketId);
+    const ticket = allMockTickets().find((t) => t.id === ticketId);
     if (!ticket) {
       throw new ApiError(404, { code: "ticket_not_found", message: "Ticket not found" });
     }
@@ -299,6 +299,7 @@ export function createMockClient(options: MockClientOptions): ApiClient {
         if (ticket.status !== "resolved") {
           ticket.status = "resolved";
           ticket.resolved_at = new Date().toISOString();
+          persistFiledTickets();
         }
         return { ...ticket };
       }),
