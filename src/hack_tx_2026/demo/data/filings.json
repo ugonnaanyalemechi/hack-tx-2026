@@ -1,0 +1,71 @@
+{
+  "disclaimer": "SYNTHETIC DEMO DATA. Every company, filing, figure and person here is invented for the Agent Platform demo. None of it comes from a real company, a real filing or any employer's documents.",
+  "filings": [
+    {
+      "filing_id": "FCT-LARK-2026Q1",
+      "company": "Larkspur Widget Co.",
+      "quarter": "2026-Q1",
+      "form": "Quarterly report (fictional)",
+      "revenue": "$41.5 million",
+      "net_income": "$3.9 million",
+      "diluted_eps": "$0.29",
+      "full_year_revenue_guidance": "$180 million",
+      "highlights": "Opened a second widget plant in the fictional town of Fernhollow. Gross margin was 34%."
+    },
+    {
+      "filing_id": "FCT-LARK-2026Q2",
+      "company": "Larkspur Widget Co.",
+      "quarter": "2026-Q2",
+      "form": "Quarterly report (fictional)",
+      "revenue": "$48.2 million",
+      "net_income": "$5.6 million",
+      "diluted_eps": "$0.41",
+      "full_year_revenue_guidance": "$190 million",
+      "highlights": "Raised full-year guidance after strong demand for the Model 7 widget. Gross margin was 36%."
+    },
+    {
+      "filing_id": "FCT-BRMB-2026Q1",
+      "company": "Bramblewood Robotics Inc.",
+      "quarter": "2026-Q1",
+      "form": "Quarterly report (fictional)",
+      "revenue": "$12.7 million",
+      "net_income": "-$2.4 million (net loss)",
+      "diluted_eps": "-$0.18",
+      "full_year_revenue_guidance": "$60 million",
+      "highlights": "Reported a net loss while scaling production of the Hedgehog warehouse robot."
+    },
+    {
+      "filing_id": "FCT-BRMB-2026Q2",
+      "company": "Bramblewood Robotics Inc.",
+      "quarter": "2026-Q2",
+      "form": "Quarterly report (fictional)",
+      "revenue": "$15.9 million",
+      "net_income": "-$0.8 million (net loss)",
+      "diluted_eps": "-$0.06",
+      "full_year_revenue_guidance": "$62 million",
+      "highlights": "Narrowed the net loss as Hedgehog robot shipments doubled. Backlog reached 1,150 units."
+    },
+    {
+      "filing_id": "FCT-QUIL-2026Q1",
+      "company": "Quillfeather Freight Ltd.",
+      "quarter": "2026-Q1",
+      "form": "Quarterly report (fictional)",
+      "revenue": "$72.4 million",
+      "net_income": "$6.8 million",
+      "diluted_eps": "$0.74",
+      "full_year_revenue_guidance": "$300 million",
+      "highlights": "Added four cargo barges to the fictional Silverbend river route."
+    },
+    {
+      "filing_id": "FCT-QUIL-2026Q2",
+      "company": "Quillfeather Freight Ltd.",
+      "quarter": "2026-Q2",
+      "form": "Quarterly report (fictional)",
+      "revenue": "$79.1 million",
+      "net_income": "$8.0 million",
+      "diluted_eps": "$0.87",
+      "full_year_revenue_guidance": "$310 million",
+      "highlights": "Fuel costs fell 6% from the prior quarter. Declared a quarterly dividend of $0.12 per share."
+    }
+  ]
+}

@@ -21,6 +21,7 @@ dependencies = [
 [project.scripts]
 hack-tx-2026 = "hack_tx_2026:main"
 check = "hack_tx_2026.check:main"
+seed = "hack_tx_2026.seed:main"
 
 [build-system]
 requires = ["uv_build>=0.13.5,<0.14.0"]

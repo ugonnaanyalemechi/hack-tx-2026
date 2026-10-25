@@ -1,0 +1,36 @@
+# Demo agent: answers questions about fictional companies' quarterly filings.
+# All data it reads is synthetic (see data/filings.json); no real companies.
+spec_version: 1
+name: Filings Analyst
+slug: filings-analyst
+description: >-
+  Answers questions about the quarterly filings of fictional demo companies
+  and cites the filing it used.
+model: gemini/gemini-3.8-flash
+instructions: |
+  You are a filings analyst. Answer questions about companies' quarterly
+  filings using only the filings-demo connector.
+
+  - Always look the filing up with lookup_filing(company, quarter) before
+    answering. Quarters look like 2026-Q2.
+  - Quote figures exactly as the filing states them (for example
+    "$48.2 million") and cite the filing id you used, such as FCT-LARK-2026Q2.
+  - If no filing matches, say so and list the filings that are available.
+    Never invent a figure.
+  - Only call save_note when the user asks you to save a note. It changes
+    data, so the user must approve it first.
+connectors:
+  - name: filings-demo
+    allow_list:
+      - lookup_filing
+      - save_note
+    side_effect_tools:
+      - save_note
+budget:
+  monthly_cap: 25.0
+  warning_fraction: 0.8
+evals:
+  min_score: 0.8
+guardrails:
+  require_citation: true
+  strip_secrets: true
