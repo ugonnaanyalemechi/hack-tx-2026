@@ -9,6 +9,10 @@ callers should only rely on the signatures below.
 
 from typing import Any, Protocol
 
+from sqlalchemy import select
+
+from hack_tx_2026.db.base import SessionLocal
+from hack_tx_2026.db.orm import Agent, AgentVersion
 from hack_tx_2026.models.records import EntryPoint
 
 
@@ -59,8 +63,31 @@ def create_ticket(run_id: str, question: str, answer: str, created_by: str) -> s
 
 def read_agent_version(agent_id: str, version_number: int | None = None) -> dict[str, Any]:
     """Owned by platform (registry). Returns the live version when
-    version_number is omitted."""
-    raise NotImplementedError("owner:platform — registry, ticket #13")
+    version_number is omitted, as a dict with agent_id, agent_version_id,
+    version_number, status and spec. Raises LookupError if there is no such
+    agent or version (or no live version). Uses its own DB session."""
+    with SessionLocal() as session:
+        if version_number is None:
+            agent = session.get(Agent, agent_id)
+            version = session.get(AgentVersion, agent.live_version_id) if agent else None
+            if version is None or version.agent_id != agent_id:
+                raise LookupError(f"agent {agent_id} has no live version")
+        else:
+            version = session.scalar(
+                select(AgentVersion).where(
+                    AgentVersion.agent_id == agent_id,
+                    AgentVersion.version_number == version_number,
+                )
+            )
+            if version is None:
+                raise LookupError(f"agent {agent_id} has no version {version_number}")
+        return {
+            "agent_id": version.agent_id,
+            "agent_version_id": version.id,
+            "version_number": version.version_number,
+            "status": version.status,
+            "spec": version.spec,
+        }
 
 
 def run_agent(agent_version_id: str, entry_point: EntryPoint, run_input: RunInput) -> RunResult:
