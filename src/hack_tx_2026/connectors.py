@@ -19,7 +19,7 @@ from hack_tx_2026.db.orm import Agent, AgentVersion, Connector, ConnectorGrant
 from hack_tx_2026.demo import filings
 from hack_tx_2026.errors import ApiError
 from hack_tx_2026.models.api import Page
-from hack_tx_2026.models.connector_api import ConnectorOut, ToolOut
+from hack_tx_2026.models.connector_api import ConnectorOut, GrantOut, ToolOut
 from hack_tx_2026.models.spec import AgentSpec
 
 # The MCP servers the layer can reach, by connector name. A granted
@@ -38,6 +38,18 @@ _SERVER_DEFS: dict[str, list[dict[str, Any]]] = {
     fake_mcp.CONNECTOR_NAME: fake_mcp.TOOL_DEFS,
     filings.CONNECTOR_NAME: filings.TOOL_DEFS,
 }
+
+
+def _server_def(connector_name: str, tool_name: str) -> dict[str, Any]:
+    """A tool's description and input schema from its server's definitions,
+    with defaults for a tool (or connector) the servers don't define."""
+    server_def = next(
+        (d for d in _SERVER_DEFS.get(connector_name, []) if d["name"] == tool_name), {}
+    )
+    return {
+        "description": server_def.get("description", ""),
+        "input_schema": server_def.get("input_schema", {"type": "object"}),
+    }
 
 
 class ToolNotLoadedError(PermissionError):
@@ -105,12 +117,36 @@ def list_connectors(session: Session, limit: int, cursor: str | None) -> Page[Co
             id=c.id,
             name=c.name,
             description=c.description,
-            tools=[ToolOut(**tool) for tool in c.tools],
+            tools=[
+                ToolOut(
+                    name=tool["name"],
+                    side_effect=tool["side_effect"],
+                    **_server_def(c.name, tool["name"]),
+                )
+                for tool in c.tools
+            ],
         )
         for c in page
     ]
     next_cursor = _b64(page[-1].name) if len(rows) > limit else None
     return Page[ConnectorOut](items=items, next_cursor=next_cursor)
+
+
+def list_active_grants(session: Session, limit: int, cursor: str | None) -> Page[GrantOut]:
+    """Grants not yet revoked, ordered by id, paged with an id cursor."""
+    stmt = (
+        select(ConnectorGrant)
+        .where(ConnectorGrant.revoked_at.is_(None))
+        .order_by(ConnectorGrant.id)
+        .limit(limit + 1)
+    )
+    if cursor:
+        stmt = stmt.where(ConnectorGrant.id > _unb64(cursor))
+    rows = list(session.scalars(stmt))
+    page = rows[:limit]
+    items = [GrantOut.model_validate(g, from_attributes=True) for g in page]
+    next_cursor = _b64(page[-1].id) if len(rows) > limit else None
+    return Page[GrantOut](items=items, next_cursor=next_cursor)
 
 
 def _active_grant(session: Session, connector_id: str, agent_id: str) -> ConnectorGrant | None:
@@ -177,14 +213,12 @@ def load_agent_tools(session: Session, agent_version_id: str) -> list[LoadedTool
             side_effect = (
                 bool(tool_def.get("side_effect")) or name in connector_spec.side_effect_tools
             )
-            server_def = next((d for d in _SERVER_DEFS[connector.name] if d["name"] == name), {})
             tools.append(
                 LoadedTool(
                     connector_name=connector.name,
                     name=name,
                     side_effect=side_effect,
-                    description=server_def.get("description", ""),
-                    input_schema=server_def.get("input_schema", {"type": "object"}),
+                    **_server_def(connector.name, name),
                 )
             )
 

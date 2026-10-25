@@ -4,8 +4,9 @@ Each case runs through `seams.run_agent` with entry point "eval". Checks:
 expected strings (case-insensitive substrings), citations, then an optional
 rubric. Functions flush; callers commit.
 
-ASSUMPTION (flag for owner:runtime): `RunResult.output` is
-`{"text": str, "citations": list}`. Missing or malformed output fails the case.
+`RunResult.output` of a completed run is the guarded answer:
+`{"text": str, "citations": list, "guard_notes": list}` (see
+`eval_entry.run_eval`). Missing or malformed output fails the case.
 
 Rubric grading goes through `rubric_grader`. The real grader must call the
 metering model gateway; until it exists the default grader is unavailable and

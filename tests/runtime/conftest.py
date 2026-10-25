@@ -21,7 +21,7 @@ import pytest
 import yaml
 from sqlalchemy.orm import sessionmaker
 
-from hack_tx_2026 import gateway
+from hack_tx_2026 import gateway, seams
 from hack_tx_2026.db.orm import AgentVersion, Run
 from hack_tx_2026.fake_model import ScriptedModel
 
@@ -37,10 +37,13 @@ def backoff_sleeps() -> list[float]:
 
 @pytest.fixture
 def install_gateway(
-    test_engine, client, backoff_sleeps
+    test_engine, client, backoff_sleeps, monkeypatch
 ) -> Iterator[Callable[[gateway.ModelClient], None]]:
-    """Installs a gateway over the given model client and the test database."""
+    """Installs a gateway over the given model client and the test database.
+    The seams point at the test database too: the gateway checks the agent's
+    budget through `seams.check_agent_budget` before every call."""
     session_factory = sessionmaker(bind=test_engine, autoflush=False, autocommit=False)
+    monkeypatch.setattr(seams, "SessionLocal", session_factory)
 
     def install(model_client: gateway.ModelClient) -> None:
         gateway.set_gateway(
