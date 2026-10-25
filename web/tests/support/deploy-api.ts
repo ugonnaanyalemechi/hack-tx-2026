@@ -10,7 +10,7 @@
  * (`src/hack_tx_2026/demo/seed_data.py`).
  */
 
-import type { Page, Request } from "@playwright/test";
+import { expect, type Page, type Request } from "@playwright/test";
 import type { ErrorResponse } from "../../lib/contracts/api";
 import type {
   DeployRequest,
@@ -231,16 +231,17 @@ function parseBody(request: Request): unknown {
   }
 }
 
-/** Route every /v1 call the page makes to the fake and record it. */
+// RUNTIME-PLACEHOLDER(#26): fakes the platform's eval-report and deploy endpoints, i.e. the eval runner (#27) running test cases through the runtime's eval entry point (#26). Keep as the Playwright path once the real ones land.
+/** Route every /api/v1 call the page makes to the fake and record it. */
 export async function fakePlatformApi(page: Page, options: FakeApiOptions) {
   const calls: RecordedCall[] = [];
 
-  await page.route("**/v1/**", async (route) => {
+  await page.route("**/api/v1/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     const call: RecordedCall = {
       method: request.method(),
-      path: url.pathname,
+      path: url.pathname.replace(/^\/api/, ""),
       headers: await request.allHeaders(),
       body: parseBody(request),
     };
@@ -294,4 +295,14 @@ export function deployedResponse(
     ),
     eval_report: report,
   };
+}
+
+/** Pick a role in the app shell's switcher, as a demo viewer would. */
+export async function actAs(page: Page, role: "Admin" | "Builder" | "End user") {
+  const button = page
+    .getByRole("group", { name: "Viewing as" })
+    .getByRole("button", { name: role });
+  await expect(button).toBeEnabled();
+  await button.click();
+  await expect(button).toHaveAttribute("aria-pressed", "true");
 }

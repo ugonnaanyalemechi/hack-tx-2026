@@ -5,7 +5,7 @@ import { AlertTriangle, FlaskConical } from "lucide-react";
 import { deployVersion, getAgent, getLatestEvalReport } from "@/lib/deploy-api";
 import type { DeployResponse, EvalReportOut } from "@/lib/contracts/evals";
 import type { AgentDetail } from "@/lib/contracts/registry";
-import { useCurrentUserStandIn } from "@/lib/current-user-stand-in";
+import { useIdentity } from "@/lib/identity";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -30,22 +30,24 @@ function withoutReport({ eval_report, ...agent }: DeployResponse): AgentDetail {
 }
 
 export function DeployView({ agentId }: { agentId: string }) {
-  const user = useCurrentUserStandIn();
+  const { currentUser: user } = useIdentity();
+  const userId = user?.id ?? null;
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const attempt = useRef(0);
 
   // State is only set from the promise callbacks, never synchronously in the
   // effect; `load` already starts as "loading" for the first fetch.
   const fetchAll = useCallback(() => {
+    if (!userId) return;
     const current = ++attempt.current;
-    Promise.all([getAgent(agentId, user), getLatestEvalReport(agentId, user)])
+    Promise.all([getAgent(agentId, userId), getLatestEvalReport(agentId, userId)])
       .then(([agent, report]) => {
         if (current === attempt.current) setLoad({ state: "ready", agent, report });
       })
       .catch((error: Error) => {
         if (current === attempt.current) setLoad({ state: "error", message: error.message });
       });
-  }, [agentId, user]);
+  }, [agentId, userId]);
 
   useEffect(() => {
     fetchAll();
@@ -56,9 +58,10 @@ export function DeployView({ agentId }: { agentId: string }) {
     fetchAll();
   }
 
-  if (load.state === "loading") return <DeployViewSkeleton />;
+  if (!user || load.state === "loading") return <DeployViewSkeleton />;
   if (load.state === "error") return <LoadError message={load.message} onRetry={retry} />;
 
+  const viewer = user;
   const { agent, report } = load;
   const latest = agent.versions.at(-1);
 
@@ -70,29 +73,29 @@ export function DeployView({ agentId }: { agentId: string }) {
     ? agent.versions.find((v) => v.version_number === report.version_number)
     : undefined;
   const canOverride =
-    user.role === "admin" &&
+    viewer.role === "admin" &&
     report !== null &&
     gateOutcome(report) === "blocked" &&
     reportVersion?.status === "blocked";
 
   async function override(reason: string) {
     if (!report) return;
-    applyDeploy(await deployVersion(agent.id, report.version_number, user, reason));
+    applyDeploy(await deployVersion(agent.id, report.version_number, viewer.id, reason));
   }
 
   // Normal deploys are owner-only; the live version is never redeployed (#48).
   const canDeploy =
-    user.id === agent.owner_id &&
+    viewer.id === agent.owner_id &&
     latest !== undefined &&
     agent.live_version_number !== latest.version_number;
 
   async function deployLatest() {
     if (!latest) return;
-    applyDeploy(await deployVersion(agent.id, latest.version_number, user));
+    applyDeploy(await deployVersion(agent.id, latest.version_number, viewer.id));
   }
 
   return (
-    <main className={PAGE_FRAME}>
+    <div className={PAGE_FRAME}>
       <AgentHeader agent={agent} report={report} canDeploy={canDeploy} onDeploy={deployLatest} />
       <Tabs defaultValue="evals" className="gap-8">
         <TabsList variant="line" className="w-full justify-start border-b border-border-subtle">
@@ -126,13 +129,13 @@ export function DeployView({ agentId }: { agentId: string }) {
           <VersionsCard agent={agent} report={report} />
         </TabsContent>
       </Tabs>
-    </main>
+    </div>
   );
 }
 
 export function DeployViewSkeleton() {
   return (
-    <main className={PAGE_FRAME} aria-busy="true" aria-label="Loading agent">
+    <div className={PAGE_FRAME} aria-busy="true" aria-label="Loading agent">
       <div className="flex flex-col gap-4">
         <Skeleton className="h-3 w-24" />
         <Skeleton className="h-12 w-80 rounded-lg" />
@@ -144,13 +147,13 @@ export function DeployViewSkeleton() {
         <Skeleton className="col-span-8 h-80 rounded-xl" />
         <Skeleton className="col-span-4 h-56 rounded-xl" />
       </div>
-    </main>
+    </div>
   );
 }
 
 function LoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <main className={PAGE_FRAME}>
+    <div className={PAGE_FRAME}>
       <div
         role="alert"
         className="flex max-w-140 flex-col gap-3 rounded-xl border border-error/28 bg-error/12 p-6 text-sm text-text-secondary"
@@ -170,7 +173,7 @@ function LoadError({ message, onRetry }: { message: string; onRetry: () => void 
           Retry
         </Button>
       </div>
-    </main>
+    </div>
   );
 }
 

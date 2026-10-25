@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
   AGENT_ID,
+  actAs,
   agentDetail,
   apiError,
   blockedReport,
@@ -20,6 +21,7 @@ test.describe("deploy and eval views", () => {
     });
 
     await page.goto(PAGE);
+    await actAs(page, "Builder");
 
     await expect(page.getByRole("heading", { level: 1, name: "Filings Analyst" })).toBeVisible();
     await expect(page.getByText("v2 blocked")).toBeVisible();
@@ -40,6 +42,7 @@ test.describe("deploy and eval views", () => {
     });
 
     await page.goto(PAGE);
+    await actAs(page, "Builder");
 
     const rows = page.getByRole("region", { name: "Test run for v2" }).getByRole("row");
     await expect(rows).toHaveCount(7); // header + 6 cases
@@ -72,7 +75,8 @@ test.describe("deploy and eval views", () => {
       }),
     });
 
-    await page.goto(`${PAGE}?as=admin`);
+    await page.goto(PAGE);
+    await actAs(page, "Admin");
 
     const gate = page.getByRole("region", { name: "Deploy gate" });
     const submit = gate.getByRole("button", { name: "Deploy v2 anyway" });
@@ -108,7 +112,8 @@ test.describe("deploy and eval views", () => {
         apiError(409, "version_not_blocked", "Only a blocked version can be overridden"),
     });
 
-    await page.goto(`${PAGE}?as=admin`);
+    await page.goto(PAGE);
+    await actAs(page, "Admin");
 
     const gate = page.getByRole("region", { name: "Deploy gate" });
     const reason = gate.getByLabel("Reason for override");
@@ -128,6 +133,7 @@ test.describe("deploy and eval views", () => {
     });
 
     await page.goto(PAGE);
+    await actAs(page, "Builder");
 
     const gate = page.getByRole("region", { name: "Deploy gate" });
     await expect(gate).toContainText("An admin can deploy it anyway with a written reason.");
@@ -141,6 +147,7 @@ test.describe("deploy and eval views", () => {
       report: passingReport(1),
       deploy: ({ versionNumber }) => ({
         status: 200,
+        // RUNTIME-PLACEHOLDER(#26): stands in for the time a real eval run takes.
         delayMs: 400,
         body: {
           ...agent,
@@ -151,6 +158,7 @@ test.describe("deploy and eval views", () => {
     });
 
     await page.goto(PAGE);
+    await actAs(page, "Builder");
     await expect(page.getByText("v2 draft")).toBeVisible();
     await expect(page.getByRole("region", { name: "Test run for v1" })).toBeVisible();
 
@@ -185,6 +193,7 @@ test.describe("deploy and eval views", () => {
     });
 
     await page.goto(PAGE);
+    await actAs(page, "Builder");
     await page.getByRole("tab", { name: "Versions" }).click();
 
     const rows = page.getByRole("region", { name: "Versions" }).getByRole("row");
@@ -212,6 +221,7 @@ test.describe("deploy and eval views", () => {
     });
 
     await page.goto(PAGE);
+    await actAs(page, "Builder");
 
     await expect(page.getByLabel("Loading agent")).toBeVisible();
     await expect(page.getByRole("heading", { level: 1, name: "Filings Analyst" })).toBeVisible();
@@ -225,6 +235,7 @@ test.describe("deploy and eval views", () => {
     });
 
     await page.goto(PAGE);
+    await actAs(page, "Builder");
 
     await expect(page.getByText("Not live", { exact: true })).toBeVisible();
     await expect(page.getByText("No test run yet.")).toBeVisible();
@@ -245,6 +256,7 @@ test.describe("deploy and eval views", () => {
     });
 
     await page.goto(PAGE);
+    await actAs(page, "Builder");
 
     const alert = page.getByRole("main").getByRole("alert");
     await expect(alert).toContainText("Couldn't load this agent.");
@@ -265,6 +277,7 @@ test.describe("deploy and eval views: screenshots", () => {
     });
 
     await page.goto(PAGE);
+    await actAs(page, "Builder");
     await expect(page.getByRole("region", { name: "Test run for v1" })).toContainText(
       "Deploy allowed"
     );
@@ -277,7 +290,8 @@ test.describe("deploy and eval views: screenshots", () => {
       report: blockedReport(2),
     });
 
-    await page.goto(`${PAGE}?as=admin`);
+    await page.goto(PAGE);
+    await actAs(page, "Admin");
     await page
       .getByLabel("Reason for override")
       .fill("Needed for the quarter-close demo; the uncited case is a known grader gap.");
@@ -295,6 +309,7 @@ test.describe("deploy and eval views: screenshots", () => {
     });
 
     await page.goto(PAGE);
+    await actAs(page, "Builder");
     await page.getByRole("tab", { name: "Versions" }).click();
     await expect(page.getByRole("region", { name: "Versions" })).toBeVisible();
     await page.screenshot({ path: "tests/__screenshots__/deploy-versions.png", fullPage: true });

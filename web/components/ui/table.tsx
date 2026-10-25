@@ -1,10 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { cn } from "@/lib/utils"
+import { cn } from "cn"
 
-// Themed to Nocturne (docs/design-system.md): border.subtle row dividers,
-// overline table headers in text.brand, body-s cells.
+// Themed for Nocturne tables: subtle hairline rows, small brand-tinted
+// header labels, and a cobalt tint for the selected row.
 
 function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
@@ -25,7 +25,7 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   return (
     <thead
       data-slot="table-header"
-      className={cn("[&_tr]:border-b [&_tr]:border-border-subtle [&_tr]:hover:bg-transparent", className)}
+      className={cn("[&_tr]:border-b [&_tr]:hover:bg-transparent", className)}
       {...props}
     />
   )
@@ -59,7 +59,7 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
     <tr
       data-slot="table-row"
       className={cn(
-        "border-b border-border-subtle transition-colors hover:bg-white/3 has-aria-expanded:bg-white/3 data-[state=selected]:bg-white/5",
+        "border-b border-border-subtle transition-colors hover:bg-white/4 has-aria-expanded:bg-white/4 data-[state=selected]:bg-primary-500/12",
         className
       )}
       {...props}
@@ -72,7 +72,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
     <th
       data-slot="table-head"
       className={cn(
-        "h-10 px-2 text-left align-middle font-mono text-overline font-medium tracking-overline whitespace-nowrap text-text-brand uppercase [&:has([role=checkbox])]:pr-0",
+        "h-10 px-3 text-left align-middle text-xs font-medium whitespace-nowrap text-text-brand [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}
@@ -85,7 +85,7 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
     <td
       data-slot="table-cell"
       className={cn(
-        "px-2 py-3 align-middle whitespace-nowrap text-text-primary [&:has([role=checkbox])]:pr-0",
+        "h-12 px-3 align-middle whitespace-nowrap text-text-primary [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}
@@ -100,7 +100,7 @@ function TableCaption({
   return (
     <caption
       data-slot="table-caption"
-      className={cn("mt-4 text-xs text-text-muted", className)}
+      className={cn("mt-4 text-sm text-muted-foreground", className)}
       {...props}
     />
   )

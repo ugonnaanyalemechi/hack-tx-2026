@@ -2,15 +2,16 @@
  * Calls the deploy and eval views make to the platform API
  * (`src/hack_tx_2026/routers/platform.py` and `routers/evals.py`).
  *
- * Paths are relative: `next.config.ts` proxies `/v1/*` to the backend, and
- * Playwright fakes them at the network boundary. When #19's typed API client
- * lands, these three functions move onto it.
+ * Requests go to `API_BASE_URL` (proxied to the backend by `next.config.ts`)
+ * acting as the user chosen in the role switcher (`useIdentity()` in
+ * `lib/identity.tsx`); Playwright fakes them at the network boundary.
+ * #19's `ApiClient` is read-only, so these write-capable calls live here.
  */
 
+import { API_BASE_URL, IDENTITY_HEADER_NAME } from "./api/config";
 import type { ErrorResponse } from "./contracts/api";
 import type { DeployRequest, DeployResponse, EvalReportOut } from "./contracts/evals";
 import type { AgentDetail } from "./contracts/registry";
-import { IDENTITY_HEADER, type CurrentUser } from "./current-user-stand-in";
 
 export class ApiError extends Error {
   constructor(
@@ -23,15 +24,15 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, user: CurrentUser, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, userId: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(path, {
+    response = await fetch(`${API_BASE_URL}${path}`, {
       ...init,
       cache: "no-store",
       headers: {
         "Content-Type": "application/json",
-        [IDENTITY_HEADER]: user.id,
+        [IDENTITY_HEADER_NAME]: userId,
         ...init?.headers,
       },
     });
@@ -48,21 +49,22 @@ async function request<T>(path: string, user: CurrentUser, init?: RequestInit): 
   );
 }
 
+// RUNTIME-PLACEHOLDER(#26): no mock-mode path. Eval reports and deploy-gate results come only from the real eval runner (#27), which runs versions through the runtime's eval entry point (#26); until both land, only Playwright's network fake (tests/support/deploy-api.ts) serves these three calls. Replace with real responses and, if the demo needs it, add them to the mock client (lib/api/mock.ts).
 function agentPath(agentId: string): string {
   return `/v1/agents/${encodeURIComponent(agentId)}`;
 }
 
-export function getAgent(agentId: string, user: CurrentUser): Promise<AgentDetail> {
-  return request<AgentDetail>(agentPath(agentId), user);
+export function getAgent(agentId: string, userId: string): Promise<AgentDetail> {
+  return request<AgentDetail>(agentPath(agentId), userId);
 }
 
 /** The agent's most recent eval report, or null when it has never been tested. */
 export async function getLatestEvalReport(
   agentId: string,
-  user: CurrentUser
+  userId: string
 ): Promise<EvalReportOut | null> {
   try {
-    return await request<EvalReportOut>(`${agentPath(agentId)}/eval-report`, user);
+    return await request<EvalReportOut>(`${agentPath(agentId)}/eval-report`, userId);
   } catch (error) {
     if (error instanceof ApiError && error.code === "eval_report_not_found") return null;
     throw error;
@@ -76,11 +78,11 @@ export async function getLatestEvalReport(
 export function deployVersion(
   agentId: string,
   versionNumber: number,
-  user: CurrentUser,
+  userId: string,
   overrideReason?: string
 ): Promise<DeployResponse> {
   const body: DeployRequest = overrideReason ? { override_reason: overrideReason } : {};
-  return request<DeployResponse>(`${agentPath(agentId)}/versions/${versionNumber}/deploy`, user, {
+  return request<DeployResponse>(`${agentPath(agentId)}/versions/${versionNumber}/deploy`, userId, {
     method: "POST",
     body: JSON.stringify(body),
   });

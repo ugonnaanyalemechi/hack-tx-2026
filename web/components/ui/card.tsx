@@ -1,8 +1,9 @@
 import * as React from "react"
 import { cn } from "cn"
 
-// Themed to the Nocturne "content card" (docs/design-system.md §6): 24px
-// padding, radius.xl, a 4% white fill, border.default and elevation e1.
+// Themed to the Nocturne content card (docs/design-system.md §6, Cards):
+// 24px padding (20px for size="sm"), 20px radius, white 4% fill, default
+// hairline border and e1 elevation.
 
 function Card({
   className,
@@ -14,7 +15,7 @@ function Card({
       data-slot="card"
       data-size={size}
       className={cn(
-        "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl border border-border-default bg-surface-glass py-(--card-spacing) text-sm text-card-foreground shadow-e1 [--card-spacing:--spacing(6)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(3)] data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
+        "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl border border-border-default bg-surface-glass py-(--card-spacing) text-sm text-card-foreground shadow-e1 [--card-spacing:--spacing(6)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(5)] data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
         className
       )}
       {...props}
@@ -40,7 +41,9 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-title"
       className={cn(
-        "text-base leading-snug font-medium group-data-[size=sm]/card:text-sm",
+        // Color comes from the card; a text color here would make the
+        // class merger drop the custom text-h4 size.
+        "text-h4",
         className
       )}
       {...props}
@@ -86,7 +89,7 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-footer"
       className={cn(
-        "flex items-center rounded-b-xl border-t border-border-subtle p-(--card-spacing)",
+        "flex items-center rounded-b-xl border-t bg-muted/50 p-(--card-spacing)",
         className
       )}
       {...props}

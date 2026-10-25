@@ -1,20 +1,21 @@
 import { Suspense } from "react";
-import { TopNav } from "@/components/chat/top-nav";
+import { AppShell } from "@/components/shell/app-shell";
 import { DeployView, DeployViewSkeleton } from "@/components/deploy/deploy-view";
-import { StandInTopNav } from "@/components/deploy/stand-in-top-nav";
 
-/** Owner view of an agent's eval results and deploy gate (mockup: owner_view_evals_and_deploy). */
+/**
+ * Owner view of an agent's eval results and deploy gate (mockup:
+ * owner_view_evals_and_deploy). The shell reads the pathname, which is only
+ * known per request on this dynamic route, so it sits inside a Suspense
+ * boundary with the page body.
+ */
 export default function AgentEvalsPage({ params }: PageProps<"/agents/[agentId]/evals">) {
   return (
-    <div className="flex min-h-dvh flex-col bg-canvas">
-      <Suspense fallback={<TopNav activeTab="Build" activeRole="Builder" />}>
-        <StandInTopNav />
-      </Suspense>
-      <Suspense fallback={<DeployViewSkeleton />}>
+    <Suspense fallback={<DeployViewSkeleton />}>
+      <AppShell>
         {params.then(({ agentId }) => (
           <DeployView agentId={agentId} />
         ))}
-      </Suspense>
-    </div>
+      </AppShell>
+    </Suspense>
   );
 }
