@@ -37,7 +37,7 @@ import json
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Annotated, Any, TypedDict
+from typing import Annotated, Any, NotRequired, TypedDict
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.config import get_stream_writer
@@ -76,6 +76,7 @@ class TranscriptEntry(TypedDict):
     role: str  # user | assistant
     text: str
     created_at: str  # ISO 8601, UTC
+    run_id: NotRequired[str]  # the run that wrote the entry (#30)
 
 
 class ChatState(TypedDict, total=False):
@@ -181,7 +182,7 @@ def _tools_node(state: ChatState, runtime: Runtime[RunContext]) -> ChatState:
     return {"turn": [*turn, *results]}
 
 
-def _respond_node(state: ChatState) -> ChatState:
+def _respond_node(state: ChatState, runtime: Runtime[RunContext]) -> ChatState:
     turn = state["turn"]
     text = turn[-1].get("content") or ""
     # The output guard (#16) runs here, before message_complete.
@@ -189,7 +190,14 @@ def _respond_node(state: ChatState) -> ChatState:
     return {
         "messages": turn,
         "turn": [],
-        "transcript": [{"role": "assistant", "text": text, "created_at": _now_iso()}],
+        "transcript": [
+            {
+                "role": "assistant",
+                "text": text,
+                "created_at": _now_iso(),
+                "run_id": runtime.context.run_id,
+            }
+        ],
     }
 
 
@@ -233,7 +241,10 @@ def stream_chat(
 ) -> Iterator[Any]:
     """Runs one chat turn on a thread and yields its stream events, from
     run_started to run_finished. The run row must already exist. Never raises:
-    a failure is an ErrorEvent followed by run_finished("failed")."""
+    a failure is an ErrorEvent followed by run_finished("failed").
+
+    A re-check (#30) passes its own run id as `thread_id`: it starts from
+    fresh memory, and there is no thread row to touch."""
     yield RunStartedEvent(run_id=run_id)
     status: RunFinishedStatus = "completed"
     error: ErrorEvent | None = None
@@ -246,7 +257,9 @@ def stream_chat(
         )
         user_turn: ChatState = {
             "turn": [{"role": "user", "content": text}],
-            "transcript": [{"role": "user", "text": text, "created_at": _now_iso()}],
+            "transcript": [
+                {"role": "user", "text": text, "created_at": _now_iso(), "run_id": run_id}
+            ],
         }
         yield from build_graph().stream(
             user_turn, _config(thread_id), context=context, stream_mode="custom"

@@ -19,7 +19,12 @@ from hack_tx_2026.db.base import get_session
 from hack_tx_2026.db.orm import Thread
 from hack_tx_2026.identity import CurrentUser, get_current_user
 from hack_tx_2026.models.api import Page
-from hack_tx_2026.models.chat_api import MessageOut, SendMessageRequest, ThreadOut
+from hack_tx_2026.models.chat_api import (
+    FlagRequest,
+    MessageOut,
+    SendMessageRequest,
+    ThreadOut,
+)
 from hack_tx_2026.models.events import StreamEvent
 
 router = APIRouter(prefix="/v1", tags=["runtime"])
@@ -35,6 +40,13 @@ def get_owned_thread(thread_id: str, session: SessionDep, user: UserDep) -> Thre
 
 
 OwnedThreadDep = Annotated[Thread, Depends(get_owned_thread)]
+
+
+def get_flaggable_run(run_id: str, session: SessionDep, user: UserDep) -> chat.FlagTarget:
+    return chat.flaggable_run(session, user, run_id)
+
+
+FlaggableRunDep = Annotated[chat.FlagTarget, Depends(get_flaggable_run)]
 
 
 def _sse(events: Iterator[Any]) -> Iterator[str]:
@@ -75,6 +87,27 @@ def send_message(
         agent_version_id=version["agent_version_id"],
         spec=version["spec"],
         text=body.text,
+    )
+    return StreamingResponse(
+        _sse(events),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/runs/{run_id}/flag")
+def flag_run(
+    body: FlagRequest, target: FlaggableRunDep, session: SessionDep, user: UserDep
+) -> StreamingResponse:
+    """Files a ticket for the run's answer, then streams a re-check run: the
+    same agent version answering the same question on fresh memory."""
+    run, version = chat.start_recheck_run(session, user, target)
+    events = agent_runtime.stream_chat(
+        run_id=run.id,
+        thread_id=run.id,
+        agent_version_id=version["agent_version_id"],
+        spec=version["spec"],
+        text=target.question,
     )
     return StreamingResponse(
         _sse(events),
