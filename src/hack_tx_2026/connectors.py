@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from hack_tx_2026 import fake_mcp
 from hack_tx_2026.admin_reads import _b64, _unb64
 from hack_tx_2026.db.orm import Agent, AgentVersion, Connector, ConnectorGrant
+from hack_tx_2026.demo import filings
 from hack_tx_2026.errors import ApiError
 from hack_tx_2026.models.api import Page
 from hack_tx_2026.models.connector_api import ConnectorOut, ToolOut
@@ -26,6 +27,7 @@ from hack_tx_2026.models.spec import AgentSpec
 # are not loaded.
 _SERVERS: dict[str, Callable[..., dict[str, Any]]] = {
     fake_mcp.CONNECTOR_NAME: fake_mcp.call_tool,
+    filings.CONNECTOR_NAME: filings.call_tool,
 }
 
 
@@ -42,19 +44,36 @@ class LoadedTool:
         return _SERVERS[self.connector_name](self.name, **arguments)
 
 
-def seed_fake_mcp_connector(session: Session) -> Connector:
-    """Idempotent: creates the fake-mcp connector row if it's missing."""
-    connector = session.query(Connector).filter_by(name=fake_mcp.CONNECTOR_NAME).first()
+def _seed_connector(
+    session: Session, name: str, description: str, tools: list[dict[str, Any]]
+) -> Connector:
+    """Idempotent: creates the named connector row if it's missing."""
+    connector = session.query(Connector).filter_by(name=name).first()
     if connector is None:
-        connector = Connector(
-            name=fake_mcp.CONNECTOR_NAME,
-            description="Fake MCP server: a read-only lookup tool and a side-effect note tool.",
-            tools=fake_mcp.TOOL_DEFS,
-        )
+        connector = Connector(name=name, description=description, tools=tools)
         session.add(connector)
         session.commit()
         session.refresh(connector)
     return connector
+
+
+def seed_fake_mcp_connector(session: Session) -> Connector:
+    """Idempotent: creates the fake-mcp connector row if it's missing."""
+    return _seed_connector(
+        session,
+        fake_mcp.CONNECTOR_NAME,
+        "Fake MCP server: a read-only lookup tool and a side-effect note tool.",
+        fake_mcp.TOOL_DEFS,
+    )
+
+
+def seed_filings_demo_connector(session: Session) -> Connector:
+    """Idempotent: creates the filings-demo connector row if it's missing.
+    The only place that row is created, so the demo seed never adds a second.
+    """
+    return _seed_connector(
+        session, filings.CONNECTOR_NAME, filings.CONNECTOR_DESCRIPTION, filings.TOOL_DEFS
+    )
 
 
 def list_connectors(session: Session, limit: int, cursor: str | None) -> Page[ConnectorOut]:
